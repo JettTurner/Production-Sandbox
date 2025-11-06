@@ -7,7 +7,7 @@ from tkinter import filedialog, messagebox, scrolledtext
 # =========================================
 # DEFAULT PATHS (edit as needed)
 # =========================================
-DEFAULT_ROOT = "C:\github\_ROOT"
+DEFAULT_ROOT = "C:\github\_TEST_ROOT"
 DEFAULT_NATIONAL_FILE = "C:\github\_ADMINTOOLS\_Tools\File_Structure_Testing\_ini\national_structure.ini"
 # Division -> default project template
 DIVISION_TEMPLATE_MAP = {

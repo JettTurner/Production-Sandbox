@@ -10,7 +10,7 @@ from tkinter import ttk, filedialog, messagebox, scrolledtext
 DEFAULT_NATIONAL_FILE = "_ini/national_structure.ini"
 DEFAULT_OFFICE_FILE = "_ini/office_structure.ini"
 DEFAULT_ASSETLIBRARY_FILE = "_ini/folder_structure_asset_library.ini"
-DEFAULT_ROOT = "D:/github/_ROOT"
+DEFAULT_ROOT = "D:/github/_TEST_ROOT"
 
 # ================================
 # Theme
