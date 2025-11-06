@@ -1,5 +1,3 @@
----
-
 # **PBK VizLab Tools Documentation**
 
 ### *Master Structure Creator & Project Generator Suite*
