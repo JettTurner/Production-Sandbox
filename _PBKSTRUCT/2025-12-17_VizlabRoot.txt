@@ -1,4 +1,4 @@
-01_VL
+01_EXT
 	CA
 		ANH(Anaheim)
 			*Projects
@@ -73,7 +73,7 @@
 	WA
 		TCM(Tacoma)
 			*Projects
-02_VR
+02_INT
 	0201_VR
 	0202_3D
 	0203_AI
