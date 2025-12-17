@@ -72,6 +72,13 @@ def create_folder(base_path, folder_name, log_func, overwrite_mode="Only New", i
     except Exception as e:
         log_func(f"[X] Failed to create folder: {folder_path}. Error: {e}", THEME["error"])
 
+def validate_path(self, path, is_file=False):
+    if not path:
+        return False
+    if is_file:
+        return os.path.isfile(path)
+    return os.path.exists(path)
+
 
 # ================================
 # Asset Library Structure
@@ -184,6 +191,7 @@ class MasterStructureCreator:
         self.root = root
         self.root.title("Master Structure Creator")
         self.root.configure(bg=THEME["bg"])
+        self.use_defaults = tk.BooleanVar(value=True)
 
         # -------------------------
         # Adjustable sizes (easy to tweak)
@@ -229,17 +237,50 @@ class MasterStructureCreator:
         self._build_log_panel()
 
         self.refresh_preview()
+        self.apply_defaults()
 
     # -------------------------
     # Helper: labeled entry with browse
     # -------------------------
+    def apply_defaults(self):
+        self.root_folder.set(DEFAULT_ROOT)
+        self.master_ini.set(DEFAULT_NATIONAL_FILE)
+        self.office_ini.set(DEFAULT_OFFICE_FILE)
+        self.asset_ini.set(DEFAULT_ASSETLIBRARY_FILE)
+    
     def _labeled_entry(self, parent, label, textvar, browse_cmd):
         frame = tk.Frame(parent, bg=THEME["bg"])
         frame.pack(fill="x", padx=10, pady=5)
+
         tk.Label(frame, text=label, bg=THEME["bg"], fg=THEME["fg"]).pack(anchor="w")
-        entry = tk.Entry(frame, textvariable=textvar, bg=THEME["input_bg"], fg=THEME["input_fg"], width=80) # IDK WHY THIS IS HERE
+
+        entry = tk.Entry(
+            frame,
+            textvariable=textvar,
+            bg=THEME["input_bg"],
+            fg=THEME["input_fg"],
+            disabledbackground="#222222",
+            disabledforeground="#888888"
+        )
         entry.pack(side="left", expand=True, fill="x")
-        tk.Button(frame, text="Browse", command=browse_cmd, bg=THEME["button_bg"], fg=THEME["button_fg"]).pack(side="right", padx=5)
+
+        browse = tk.Button(
+            frame,
+            text="Browse",
+            command=browse_cmd,
+            bg=THEME["button_bg"],
+            fg=THEME["button_fg"]
+        )
+        browse.pack(side="right", padx=5)
+
+        # Auto-disable when using defaults
+        def toggle(*_):
+            state = "disabled" if self.use_defaults.get() else "normal"
+            entry.config(state=state)
+            browse.config(state=state)
+
+        self.use_defaults.trace_add("write", toggle)
+        toggle()
 
     # -------------------------
     # Build Left Panel
@@ -250,6 +291,32 @@ class MasterStructureCreator:
         left_inner.pack(fill="both", expand=True, padx=5, pady=5)
 
         # Helper for labeled entries
+        tk.Label(
+            left_inner,
+            text="Path Mode:",
+            bg=THEME["bg"],
+            fg=THEME["fg"]
+        ).pack(anchor="w", padx=5, pady=(5, 0))
+
+        tk.Checkbutton(
+            left_inner,
+            text="Use Default Paths",
+            variable=self.use_defaults,
+            bg=THEME["bg"],
+            fg=THEME["fg"],
+            selectcolor=THEME["bg"],
+            command=self.apply_defaults
+        ).pack(anchor="w", padx=5)
+
+        tk.Button(
+            left_inner,
+            text="Reset to Defaults",
+            command=self.apply_defaults,
+            bg=THEME["button_bg"],
+            fg=THEME["button_fg"]
+        ).pack(fill="x", padx=5, pady=(0, 10))
+
+                
         self._labeled_entry(left_inner, "Root Folder:", self.root_folder, self.browse_root)
         self._labeled_entry(left_inner, "Master INI Path:", self.master_ini, self.browse_master_ini)
         self._labeled_entry(left_inner, "Office INI Path:", self.office_ini, self.browse_office_ini)
