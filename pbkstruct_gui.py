@@ -1,154 +1,184 @@
-# pbkstruct_gui.py
+# PBKSTRUCT GUI + ENGINE
+# =====================
+# Full-featured PBKSTRUCT processor
+
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
-from typing import List, Dict, Tuple
 import re
-import threading
+from typing import List, Dict, Tuple
 
 # ============================================================
-# Node Model
+# NODE MODEL
 # ============================================================
 
 class Node:
-    """Folder node for building trees"""
     def __init__(self, name: str):
         self.name = name
-        self.children: List["Node"] = []
+        self.children: List['Node'] = []
 
-    def add(self, node: "Node"):
+    def add(self, node: 'Node'):
         self.children.append(node)
 
-    def walk(self, base: Path, dry_run: bool):
+    def clone(self):
+        n = Node(self.name)
+        n.children = [c.clone() for c in self.children]
+        return n
+
+    def walk(self, base: Path, dry: bool = True):
         path = base / self.name
-        if dry_run:
-            print(f"[DRY] {path}")
+        if dry:
+            print("[DRY]", path)
         else:
             path.mkdir(parents=True, exist_ok=True)
-            print(f"[OK]  {path}")
-        for child in self.children:
-            child.walk(path, dry_run)
+            print("[OK] ", path)
+        for c in self.children:
+            c.walk(path, dry)
 
 # ============================================================
-# PBKStruct Parser
+# PARSER
 # ============================================================
 
-SECTION_RE = re.compile(r"^@(root|state|template)\b(?:\s+(.*))?$")
-INLINE_RE  = re.compile(r"^@(\w+)\b(?:\s+(.*))?$")
-STATE_LINE_RE = re.compile(r'^([A-Z0-9_]+)\s+"([^"]+)"$')
+DIRECTIVE_RE = re.compile(r'^@(\w+)(?:\s+(.*))?$')
+DEFINE_ITEM_RE = re.compile(r'^([A-Z0-9_]+)(?:\s+"(.+)")?$')
 
 class PBKStruct:
     def __init__(self):
-        self.root: List[str] = []
-        self.states: List[str] = []
-        self.state_defs: Dict[str, Dict[str,str]] = {}
-        self.templates: Dict[str, List[str]] = {}
+        self.meta = {}
+        self.root_lines = []
+        self.defines = {}        
+        self.templates = {}      
+        self.errors: List[str] = []
 
     def parse(self, text: str):
-        lines = [l.rstrip() for l in text.splitlines() if l.strip()]
-        i = 0
-        current_section = None
+        lines = text.splitlines()
+        current_block = None
         current_key = None
+        indent_stack = [0]
 
-        while i < len(lines):
-            line = lines[i].strip()
+        DIRECTIVE_RE = re.compile(r'^@(\w+)(?:\s+(.*))?$')
+        DEFINE_ITEM_RE = re.compile(r'^([A-Z0-9_]+)(?:\s+"(.+)")?$')
 
-            # SECTION HEADERS (multiline blocks)
-            sec = SECTION_RE.match(line)
-            if sec:
-                current_section = sec.group(1)
-                current_key = sec.group(2)
-                i += 1
+        for lineno, raw in enumerate(lines, 1):
+            line = raw.rstrip("\n")
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
                 continue
 
-            # INLINE DIRECTIVES
-            inline = INLINE_RE.match(line)
-            if inline:
-                directive = inline.group(1)
-                value = inline.group(2)
+            # count leading whitespace (spaces or tabs)
+            indent = len(line) - len(line.lstrip())
 
-                if directive == "states":
-                    self.states.extend([s.strip() for s in value.split(",")])
+            # ---- directive
+            m = DIRECTIVE_RE.match(stripped)
+            if m and indent == 0:
+                current_block = m.group(1)
+                current_key = m.group(2)
 
-                elif directive == "insert":
-                    if current_section == "root":
-                        self.root.append(f"@insert {value}")
-                    elif current_section == "template":
-                        self.templates[current_key].append(f"@insert {value}")
-
-                i += 1
+                if current_block in ('version', 'name'):
+                    self.meta[current_block] = current_key
+                elif current_block == 'root':
+                    self.root_lines = []
+                elif current_block == 'define':
+                    self.defines.setdefault(current_key, {})
+                elif current_block == 'template':
+                    self.templates[current_key] = []
                 continue
 
-            # CONTENT LINES
-            if current_section == "root":
-                self.root.append(line)
+            # ---- check indentation
+            if indent > indent_stack[-1]:
+                indent_stack.append(indent)
+            else:
+                while indent < indent_stack[-1]:
+                    indent_stack.pop()
+                if indent != indent_stack[-1]:
+                    self.errors.append(f"Line {lineno}: unexpected indent level")
 
-            elif current_section == "state":
-                m = STATE_LINE_RE.match(line)
-                if not m:
-                    raise ValueError(f"Invalid state line: {line}")
+            # ---- parse content
+            content = line.lstrip()
+            if current_block == 'root':
+                self.root_lines.append(content)
+            elif current_block == 'define':
+                m2 = DEFINE_ITEM_RE.match(content)
+                if not m2:
+                    self.errors.append(f"Line {lineno}: expected CODE \"Label\"")
+                    continue
+                code, label = m2.group(1), m2.group(2) or m2.group(1)
+                self.defines[current_key][code] = label
+            elif current_block == 'template':
+                self.templates[current_key].append(content)
+            else:
+                self.errors.append(f"Line {lineno}: unknown block @{current_block}")
 
-                code = m.group(1)
-                label = m.group(2) or code
-                self.state_defs.setdefault(current_key, []).append((code, label))
-
-            elif current_section == "template":
-                self.templates.setdefault(current_key, []).append(line)
-
-            i += 1
-
+        return self.errors
 
 # ============================================================
-# Tree Builder
+# TEMPLATE / EXPANSION ENGINE
 # ============================================================
 
-def build_template(template: List[str], templates: Dict[str, List[str]]) -> List[Node]:
+def build_template(lines: List[str], templates: Dict[str,List[str]]) -> List[Node]:
     stack: List[Tuple[int, Node]] = []
     roots: List[Node] = []
 
-    for line in template:
-        indent = len(line) - len(line.lstrip(" "))
-        content = line.strip()
-        if content.startswith("@insert"):
+    for raw in lines:
+        indent = len(raw) - len(raw.lstrip(' '))
+        content = raw.strip()
+
+        if content.startswith('@insert'):
             name = content.split()[1]
-            inserted = build_template(templates[name], templates)
+            if name not in templates:
+                raise ValueError(f"Template {name} not found")
+            nodes = build_template(templates[name], templates)
             if stack:
-                for n in inserted:
+                for n in nodes:
                     stack[-1][1].add(n)
             else:
-                roots.extend(inserted)
+                roots.extend(nodes)
             continue
+
         node = Node(content)
         while stack and stack[-1][0] >= indent:
             stack.pop()
+
         if stack:
             stack[-1][1].add(node)
         else:
             roots.append(node)
+
         stack.append((indent, node))
+
     return roots
 
-def build_root_tree(struct: PBKStruct) -> List[Node]:
+def build_root(struct: PBKStruct) -> List[Node]:
     roots: List[Node] = []
 
-    for entry in struct.root:
-        if entry == "01_EXT":
-            ext = Node("01_EXT")
-            for state in struct.states:
-                if state not in struct.state_defs:
-                    continue
-                state_node = Node(state)
-                for code in struct.state_defs[state]:
-                    city_node = Node(code)
-                    city_node.add(Node("Projects"))
-                    state_node.add(city_node)
-                ext.add(state_node)
-            roots.append(ext)
-        elif entry.startswith("@insert"):
-            name = entry.split()[1]
+    for line in struct.root_lines:
+        stripped = line.strip()
+        if stripped.startswith('@expand'):
+            parts = stripped.split()
+            if len(parts) != 2:
+                struct.errors.append(f"Invalid @expand line: {line}")
+                continue
+            _, key = parts
+            if key == 'states':
+                for state_code, state_name in struct.defines.get(('states',''), {}).items():
+                    s_node = Node(state_code)
+                    city_key = ('cities', state_code)
+                    if city_key in struct.defines:
+                        for city_code in struct.defines[city_key]:
+                            c_node = Node(city_code)
+                            s_node.add(c_node)
+                    roots.append(s_node)
+            continue
+
+        if stripped.startswith('@insert'):
+            name = stripped.split()[1]
+            if name not in struct.templates:
+                struct.errors.append(f"Template {name} not found")
+                continue
             roots.extend(build_template(struct.templates[name], struct.templates))
         else:
-            roots.append(Node(entry))
+            roots.append(Node(stripped))
+
     return roots
 
 # ============================================================
@@ -158,79 +188,55 @@ def build_root_tree(struct: PBKStruct) -> List[Node]:
 class PBKStructGUI(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("PBKStruct Generator")
-        self.geometry("900x600")
+        self.title("PBKSTRUCT Generator")
+        self.geometry("1000x600")
 
-        # Variables
-        self.struct_file = tk.StringVar()
-        self.output_dir = tk.StringVar()
-        self.dry_run = tk.BooleanVar(value=True)
-        self.tree_nodes: List[Node] = []
+        self.text = tk.Text(self)
+        self.text.pack(fill='both', expand=True)
 
-        # Layout
-        self.create_widgets()
+        btns = ttk.Frame(self)
+        btns.pack(fill='x')
 
-    def create_widgets(self):
-        frame_top = tk.Frame(self)
-        frame_top.pack(fill="x", padx=10, pady=5)
+        ttk.Button(btns, text="Load", command=self.load).pack(side='left')
+        ttk.Button(btns, text="Preview", command=self.preview).pack(side='left')
+        ttk.Button(btns, text="Apply", command=self.apply).pack(side='left')
 
-        tk.Label(frame_top, text="PBKStruct File:").pack(side="left")
-        tk.Entry(frame_top, textvariable=self.struct_file, width=60).pack(side="left", padx=5)
-        tk.Button(frame_top, text="Browse", command=self.browse_struct).pack(side="left")
+    def load(self):
+        path = filedialog.askopenfilename(filetypes=[('PBKSTRUCT','*.pbkstruct')])
+        if not path:
+            return
+        self.text.delete('1.0','end')
+        self.text.insert('1.0', Path(path).read_text(encoding='utf-8'))
 
-        tk.Label(frame_top, text="Output Folder:").pack(side="left", padx=10)
-        tk.Entry(frame_top, textvariable=self.output_dir, width=40).pack(side="left", padx=5)
-        tk.Button(frame_top, text="Browse", command=self.browse_output).pack(side="left")
+    def parse(self) -> PBKStruct:
+        s = PBKStruct()
+        s.parse(self.text.get('1.0','end'))
+        return s
 
-        tk.Checkbutton(frame_top, text="Dry Run", variable=self.dry_run).pack(side="left", padx=10)
+    def preview(self):
+        s = self.parse()
+        if s.errors:
+            messagebox.showerror("Parse Errors", "\n".join(s.errors))
+            return
+        roots = build_root(s)
+        messagebox.showinfo("Preview", f"Parsed {len(roots)} root nodes")
 
-        tk.Button(frame_top, text="Generate Tree", command=self.generate_tree).pack(side="right", padx=5)
-
-        # Treeview
-        self.tree = ttk.Treeview(self)
-        self.tree.pack(fill="both", expand=True, padx=10, pady=10)
-
-    def browse_struct(self):
-        file = filedialog.askopenfilename(filetypes=[("PBKStruct files", "*.pbkstruct")])
-        if file:
-            self.struct_file.set(file)
-
-    def browse_output(self):
-        folder = filedialog.askdirectory()
-        if folder:
-            self.output_dir.set(folder)
-
-    def generate_tree(self):
-        def worker():
-            try:
-                text = Path(self.struct_file.get()).read_text(encoding="utf-8")
-                struct = PBKStruct()
-                struct.parse(text)
-
-                self.tree_nodes = build_root_tree(struct)
-
-                self.after(0, self.display_tree)
-
-            except Exception as e:
-                err = str(e)
-                self.after(0, lambda err=err: messagebox.showerror("Error", err))
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def display_tree(self):
-        self.tree.delete(*self.tree.get_children())
-        for node in self.tree_nodes:
-            self.insert_tree("", node)
-
-    def insert_tree(self, parent, node: Node):
-        item = self.tree.insert(parent, "end", text=node.name)
-        for child in node.children:
-            self.insert_tree(item, child)
+    def apply(self):
+        outdir = filedialog.askdirectory()
+        if not outdir:
+            return
+        s = self.parse()
+        if s.errors:
+            messagebox.showerror("Parse Errors", "\n".join(s.errors))
+            return
+        roots = build_root(s)
+        for r in roots:
+            r.walk(Path(outdir), dry=False)
+        messagebox.showinfo("Done", "Filesystem generated successfully ✅")
 
 # ============================================================
-# Main
+# MAIN
 # ============================================================
 
-if __name__ == "__main__":
-    app = PBKStructGUI()
-    app.mainloop()
+if __name__ == '__main__':
+    PBKStructGUI().mainloop()

@@ -1,145 +1,148 @@
-@version 1.0
+@version 1.1
+@name PBK VizLab Structure
 
+#---Root---
 @root
-
 01_EXT
-    @states CA, FL, GA, MD, SC, TX, VA, WA
-
+	@expand states
+		@expand cities
+			@insert Projects
 02_INT
-    0201_VR
-    0202_3D
-    0203_AI
-    0204_GP
-    0205_PR
-
+	0201_VR
+	0202_3D
+	0203_AI
+	0204_GP
+	0205_PR
 04_AssetLibrary
-    @insert AssetLibrary
-
+	@insert AssetLibrary
 05_Reference
 06_Receipts
 07_Archive
 
-@location
-    @insert Projects
+#---Definitions---
+@define states
+	CA "California"
+	FL "Florida"
+	GA "Georgia"
+	MD "Maryland"
+	SC "South Carolina"
+	TX "Texas"
+	VA "Virginia"
+	WA "Washington"
 
-@state CA
-    ANH "Anaheim"
-    BKF "Bakersfield"
-    BER "Berkeley"
-    FOL "Folsom"
-    FRE "Fresno"
-    LAX "Los Angeles"
-    RCH "Rancho Cucamonga"
-    SDG "San Diego"
-    SLO "San Luis Obispo"
+@define cities CA
+	ANH "Anaheim"
+	BKF "Bakersfiel."
+	BER "Berkeley"
+	FOL "Folsom"
+	FRE "Fresno"
+	LAX "Los Angeles"
+	RCH "Rancho Cucamonga"
+	SDG "San Diego"
+	SLO "San Luis Obispo"
 
-@state FL
-    CGB "Coral Gables"
-    FMY "Fort Myers"
-    JAX "Jacksonville"
-    ORL "Orlando"
-    SRQ "Sarasota"
-    STP "St. Petersburg"
-    TPA "Tampa"
-    WPB "West Palm Beach"
+@define cities FL
+	CGB "Coral Gables"
+	FMY "Fort Myers"
+	JAX "Jacksonville"
+	ORL "Orlando"
+	SRQ "Sarasota"
+	STP "St. Petersburg"
+	TPA "Tampa"
+	WPB "West Palm Beach"
 
-@state GA
+@define cities TX
+	AUS "Austin"
+	DAL "Dallas"
+	DEN "Denton"
+	FBN "Fort Bend"
+	FWT "Fort Worth"
+	HOU "Houston"
+	KTY "Katy"
+	SAT "San Antonio"
+	WDL "The Woodlands"
+
+@define cities GA
 	GRF "Griffin"
 	SGH "Sugar Hill"
-
-@state MD
+	
+@define cities MD
 	BAL "Baltimore"
-
-@state SC
+	
+@define cities SC
 	GVL "Greenville"
 	RKH "Rock Hill"
-
-@state TX
-    AUS "Austin"
-    DAL "Dallas"
-    DEN "Denton"
-    FBN "Fort Bend"
-    FWT "Fort Worth"
-    HOU "Houston"
-    KTY "Katy"
-    SAT "San Antonio"
-    WDL "The Woodlands"
-
-@state VA
+	
+@define cities VA
 	RIC "Richmond"
 	
-@state WA
-    TCM "Tacoma"
+@define cities WA
+	TCM "Tacoma"
 
+
+#---Templates---
 @template Projects
-    Projects
-        CLIENT1
-            _Deliverables
-            CLIENT1_00001_VL_TestProjectName_TX_SAN_VZLB_IN
-            CLIENT1_00002_VL_TestProjectName_TX_SAN_VZLB_IN
-            CLIENT1_00003_AI_TestProjectName_TX_SAN_VZLB_IN
-            CLIENT1_00004_GP_TestProjectName_TX_SAN_VZLB_IN
-            CLIENT1_00005_VL_TestProjectName_TX_SAN_VZLB_IN
-
-        CLIENT2
-            _Deliverables
-            CLIENT2_00001_3D_TestProjectName_TX_SAN_VZLB_IN
-            CLIENT2_00002_VL_TestProjectName_TX_SAN_VZLB_IN
-
-        CLIENT3
-            _Deliverables
-            CLIENT3_00001_AI_TestProjectName_TX_SAN_VZLB_IN
-            CLIENT3_00002_GP_TestProjectName_TX_SAN_VZLB_IN
-            CLIENT3_00003_VL_TestProjectName_TX_SAN_VZLB_IN
+	Projects
+		CLIENT1
+			_Deliverables
+			CLIENT1_00001_VL_TestProjectName_TX_SAN_VZLB_IN
+			CLIENT1_00002_VL_TestProjectName_TX_SAN_VZLB_IN
+			CLIENT1_00003_AI_TestProjectName_TX_SAN_VZLB_IN
+			CLIENT1_00004_GP_TestProjectName_TX_SAN_VZLB_IN
+			CLIENT1_00005_VL_TestProjectName_TX_SAN_VZLB_IN
+		CLIENT2
+			_Deliverables
+			CLIENT2_00001_3D_TestProjectName_TX_SAN_VZLB_IN
+			CLIENT2_00002_VL_TestProjectName_TX_SAN_VZLB_IN
+		CLIENT3
+			_Deliverables
+			CLIENT3_00001_AI_TestProjectName_TX_SAN_VZLB_IN
+			CLIENT3_00002_GP_TestProjectName_TX_SAN_VZLB_IN
+			CLIENT3_00003_VL_TestProjectName_TX_SAN_VZLB_IN
 
 @template AssetLibrary
-    0400_Programs
-        040000_AccountDetails
-        DesktopShortcuts
-        Icons
-        Installers
-        PBK_VIZLAB
-        SketchupPreferences
-        BlenderStartFile
-        RevitAssets
-
-    0401_Assets
-        @insert AssetCategories
-
-    0402_Plugins
-        BlenderPlugins
-        RevitPlugins
-        SketchupPlugins
-
-    0403_Templates
-        _Twinmotion
-        3D_templates_Guides_Presets
-        PhotoshopTemplates
-        SocialMediaTemplates
-
-    0404_github
-    0405_TwinmotionUserLibrary
-    0406_AI-Prompts
-    TwinmotionUserLibrary_2025
-
+	0400_Programs
+		040000_AccountDetails
+		DesktopShortcuts
+		Icons
+		Installers
+		PBK_VIZLAB
+		SketchupPreferences
+		BlenderStartFile
+		RevitAssets
+	0401_Assets
+		@insert AssetCategories
+	0402_Plugins
+		BlenderPlugins
+		RevitPlugins
+		SketchupPlugins	
+	0403_Templates
+		_Twinmotion
+		3D_templates_Guides_Presets
+		PhotoshopTemplates
+		SocialMediaTemplates
+	0404_github	
+	0405_TwinmotionUserLibrary	
+	0406_AI-Prompts	
+	TwinmotionUserLibrary_2025
 
 @template AssetCategories
-    _3DPrint
-    _AdobeSubstance
-    _Audio
-    _Bitmaps
-    _Characters2D
-    _Characters3D
-    _CharactersAnimated
-    _Decals
-    _HDRI
-    _Lights-IES
-    _Logos
-    _Materials
-    _Megascans
-    _Objects
-    _Tools
-    _Vegetation
-    _Vehicles
-    _Video
-    Poly_Haven
+_3DPrint
+_AdobeSubstance
+_Audio
+_Bitmaps
+_Characters2D
+_Characters3D
+_CharactersAnimated
+_Decals
+_HDRI
+_Lights-IES
+_Logos
+_Materials
+_Megascans
+_Objects
+_Tools
+_Vegetation
+_Vehicles
+_Video
+Poly_Haven
