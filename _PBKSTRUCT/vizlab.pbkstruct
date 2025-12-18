@@ -43,6 +43,17 @@
     TPA "Tampa"
     WPB "West Palm Beach"
 
+@state GA
+	GRF "Griffin"
+	SGH "Sugar Hill"
+
+@state MD
+	BAL "Baltimore"
+
+@state SC
+	GVL "Greenville"
+	RKH "Rock Hill"
+
 @state TX
     AUS "Austin"
     DAL "Dallas"
@@ -54,9 +65,11 @@
     SAT "San Antonio"
     WDL "The Woodlands"
 
-@state TX
-    AUS "Austin"
-    DAL "Dallas"
+@state VA
+	RIC "Richmond"
+	
+@state WA
+    TCM "Tacoma"
 
 @template Projects
     Projects
