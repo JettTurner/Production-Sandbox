@@ -6,78 +6,78 @@
 01_EXT
 	CA
 		ANH
-			@insert Projects
+			@insert TestProjects
 		BKF
-			@insert Projects
+			@insert TestProjects
 		BER
-			@insert Projects
+			@insert TestProjects
 		FOL
-			@insert Projects
+			@insert TestProjects
 		FRE
-			@insert Projects
+			@insert TestProjects
 		LAX
-			@insert Projects
+			@insert TestProjects
 		RCH
-			@insert Projects
+			@insert TestProjects
 		SDG
-			@insert Projects
+			@insert TestProjects
 		SLO
-			@insert Projects
+			@insert TestProjects
 	FL
 		CGB
-			@insert Projects
+			@insert TestProjects
 		FMY
-			@insert Projects
+			@insert TestProjects
 		JAX
-			@insert Projects
+			@insert TestProjects
 		ORL
-			@insert Projects
+			@insert TestProjects
 		SRQ
-			@insert Projects
+			@insert TestProjects
 		STP
-			@insert Projects
+			@insert TestProjects
 		TPA
-			@insert Projects
+			@insert TestProjects
 		WPB
-			@insert Projects
+			@insert TestProjects
 	GA
 		GRF
-			@insert Projects
+			@insert TestProjects
 		SGH
-			@insert Projects
+			@insert TestProjects
 	MD
 		BAL
-			@insert Projects
+			@insert TestProjects
 	SC
 		GVL
-			@insert Projects
+			@insert TestProjects
 		RKH
-			@insert Projects
+			@insert TestProjects
 	TX
 		AUS
-			@insert Projects
+			@insert TestProjects
 		DAL
-			@insert Projects
+			@insert TestProjects
 		DEN
-			@insert Projects
+			@insert TestProjects
 		FBN
-			@insert Projects
+			@insert TestProjects
 		FWT
-			@insert Projects
+			@insert TestProjects
 		HOU
-			@insert Projects
+			@insert TestProjects
 		KTY
-			@insert Projects
+			@insert TestProjects
 		SAT
-			@insert Projects
+			@insert TestProjects
 		WDL
-			@insert Projects
+			@insert TestProjects
 	VA
 		RIC
-			@insert Projects
+			@insert TestProjects
 	WA
 		TCM
-			@insert Projects
+			@insert TestProjects
 02_INT
 	0201_VR
 	0202_3D
@@ -91,23 +91,93 @@
 07_Archive
 
 #---Templates---
-@template Projects
+@template TestProjects
 	CLIENT1
 		_Deliverables
 		CLIENT1_00001_VL_TestProjectName_TX_SAN_VZLB_IN
+			00_ProgressImages
+			01_Deliverables
+			02_Links
+			03_ReferenceFiles
+			04_ProjectFiles
+			05_PostProcess
+			06_Correspondence
 		CLIENT1_00002_VL_TestProjectName_TX_SAN_VZLB_IN
+			00_ProgressImages
+			01_Deliverables
+			02_Links
+			03_ReferenceFiles
+			04_ProjectFiles
+			05_PostProcess
+			06_Correspondence
 		CLIENT1_00003_AI_TestProjectName_TX_SAN_VZLB_IN
+			00_ProgressImages
+			01_Deliverables
+			02_Links
+			03_ReferenceFiles
+			04_ProjectFiles
+			05_PostProcess
+			06_Correspondence
 		CLIENT1_00004_GP_TestProjectName_TX_SAN_VZLB_IN
+			00_ProgressImages
+			01_Deliverables
+			02_Links
+			03_ReferenceFiles
+			04_ProjectFiles
+			05_PostProcess
+			06_Correspondence
 		CLIENT1_00005_VL_TestProjectName_TX_SAN_VZLB_IN
+			00_ProgressImages
+			01_Deliverables
+			02_Links
+			03_ReferenceFiles
+			04_ProjectFiles
+			05_PostProcess
+			06_Correspondence
 	CLIENT2
 		_Deliverables
 		CLIENT2_00001_3D_TestProjectName_TX_SAN_VZLB_IN
+			00_ProgressImages
+			01_Deliverables
+			02_Links
+			03_ReferenceFiles
+			04_ProjectFiles
+			05_PostProcess
+			06_Correspondence
 		CLIENT2_00002_VL_TestProjectName_TX_SAN_VZLB_IN
+			00_ProgressImages
+			01_Deliverables
+			02_Links
+			03_ReferenceFiles
+			04_ProjectFiles
+			05_PostProcess
+			06_Correspondence
 	CLIENT3
 		_Deliverables
 		CLIENT3_00001_AI_TestProjectName_TX_SAN_VZLB_IN
+			00_ProgressImages
+			01_Deliverables
+			02_Links
+			03_ReferenceFiles
+			04_ProjectFiles
+			05_PostProcess
+			06_Correspondence
 		CLIENT3_00002_GP_TestProjectName_TX_SAN_VZLB_IN
+			00_ProgressImages
+			01_Deliverables
+			02_Links
+			03_ReferenceFiles
+			04_ProjectFiles
+			05_PostProcess
+			06_Correspondence
 		CLIENT3_00003_VL_TestProjectName_TX_SAN_VZLB_IN
+			00_ProgressImages
+			01_Deliverables
+			02_Links
+			03_ReferenceFiles
+			04_ProjectFiles
+			05_PostProcess
+			06_Correspondence
 
 @template AssetLibrary
 	0400_Programs
