@@ -4,8 +4,79 @@
 #---Root---
 @root
 01_EXT
-	@expand states
-		@expand cities
+	CA
+		ANH
+			@insert Projects
+		BKF
+			@insert Projects
+		BER
+			@insert Projects
+		FOL
+			@insert Projects
+		FRE
+			@insert Projects
+		LAX
+			@insert Projects
+		RCH
+			@insert Projects
+		SDG
+			@insert Projects
+		SLO
+			@insert Projects
+	FL
+		CGB
+			@insert Projects
+		FMY
+			@insert Projects
+		JAX
+			@insert Projects
+		ORL
+			@insert Projects
+		SRQ
+			@insert Projects
+		STP
+			@insert Projects
+		TPA
+			@insert Projects
+		WPB
+			@insert Projects
+	GA
+		GRF
+			@insert Projects
+		SGH
+			@insert Projects
+	MD
+		BAL
+			@insert Projects
+	SC
+		GVL
+			@insert Projects
+		RKH
+			@insert Projects
+	TX
+		AUS
+			@insert Projects
+		DAL
+			@insert Projects
+		DEN
+			@insert Projects
+		FBN
+			@insert Projects
+		FWT
+			@insert Projects
+		HOU
+			@insert Projects
+		KTY
+			@insert Projects
+		SAT
+			@insert Projects
+		WDL
+			@insert Projects
+	VA
+		RIC
+			@insert Projects
+	WA
+		TCM
 			@insert Projects
 02_INT
 	0201_VR
@@ -19,86 +90,24 @@
 06_Receipts
 07_Archive
 
-#---Definitions---
-@define states
-	CA "California"
-	FL "Florida"
-	GA "Georgia"
-	MD "Maryland"
-	SC "South Carolina"
-	TX "Texas"
-	VA "Virginia"
-	WA "Washington"
-
-@define cities CA
-	ANH "Anaheim"
-	BKF "Bakersfiel."
-	BER "Berkeley"
-	FOL "Folsom"
-	FRE "Fresno"
-	LAX "Los Angeles"
-	RCH "Rancho Cucamonga"
-	SDG "San Diego"
-	SLO "San Luis Obispo"
-
-@define cities FL
-	CGB "Coral Gables"
-	FMY "Fort Myers"
-	JAX "Jacksonville"
-	ORL "Orlando"
-	SRQ "Sarasota"
-	STP "St. Petersburg"
-	TPA "Tampa"
-	WPB "West Palm Beach"
-
-@define cities TX
-	AUS "Austin"
-	DAL "Dallas"
-	DEN "Denton"
-	FBN "Fort Bend"
-	FWT "Fort Worth"
-	HOU "Houston"
-	KTY "Katy"
-	SAT "San Antonio"
-	WDL "The Woodlands"
-
-@define cities GA
-	GRF "Griffin"
-	SGH "Sugar Hill"
-	
-@define cities MD
-	BAL "Baltimore"
-	
-@define cities SC
-	GVL "Greenville"
-	RKH "Rock Hill"
-	
-@define cities VA
-	RIC "Richmond"
-	
-@define cities WA
-	TCM "Tacoma"
-
-
 #---Templates---
 @template Projects
-	Projects
-		CLIENT1
-			_Deliverables
-			CLIENT1_00001_VL_TestProjectName_TX_SAN_VZLB_IN
-			CLIENT1_00002_VL_TestProjectName_TX_SAN_VZLB_IN
-			CLIENT1_00003_AI_TestProjectName_TX_SAN_VZLB_IN
-			CLIENT1_00004_GP_TestProjectName_TX_SAN_VZLB_IN
-			CLIENT1_00005_VL_TestProjectName_TX_SAN_VZLB_IN
-		CLIENT2
-			_Deliverables
-			CLIENT2_00001_3D_TestProjectName_TX_SAN_VZLB_IN
-			CLIENT2_00002_VL_TestProjectName_TX_SAN_VZLB_IN
-		CLIENT3
-			_Deliverables
-			CLIENT3_00001_AI_TestProjectName_TX_SAN_VZLB_IN
-			CLIENT3_00002_GP_TestProjectName_TX_SAN_VZLB_IN
-			CLIENT3_00003_VL_TestProjectName_TX_SAN_VZLB_IN
+	CLIENT1
+		_Deliverables
+		CLIENT1_00001_VL_TestProjectName_TX_SAN_VZLB_IN
+		CLIENT1_00002_VL_TestProjectName_TX_SAN_VZLB_IN
+		CLIENT1_00003_AI_TestProjectName_TX_SAN_VZLB_IN
+		CLIENT1_00004_GP_TestProjectName_TX_SAN_VZLB_IN
+		CLIENT1_00005_VL_TestProjectName_TX_SAN_VZLB_IN
+	CLIENT2
+		_Deliverables
+		CLIENT2_00001_3D_TestProjectName_TX_SAN_VZLB_IN
+		CLIENT2_00002_VL_TestProjectName_TX_SAN_VZLB_IN
+	CLIENT3
+		_Deliverables
+		CLIENT3_00001_AI_TestProjectName_TX_SAN_VZLB_IN
+		CLIENT3_00002_GP_TestProjectName_TX_SAN_VZLB_IN
+		CLIENT3_00003_VL_TestProjectName_TX_SAN_VZLB_IN
 
 @template AssetLibrary
 	0400_Programs
@@ -111,11 +120,29 @@
 		BlenderStartFile
 		RevitAssets
 	0401_Assets
-		@insert AssetCategories
+		_3DPrint
+		_AdobeSubstance
+		_Audio
+		_Bitmaps
+		_Characters2D
+		_Characters3D
+		_CharactersAnimated
+		_Decals
+		_HDRI
+		_Lights-IES
+		_Logos
+		_Materials
+		_Megascans
+		_Objects
+		_Tools
+		_Vegetation
+		_Vehicles
+		_Video
+		Poly_Haven
 	0402_Plugins
 		BlenderPlugins
 		RevitPlugins
-		SketchupPlugins	
+		SketchupPlugins
 	0403_Templates
 		_Twinmotion
 		3D_templates_Guides_Presets
@@ -125,24 +152,3 @@
 	0405_TwinmotionUserLibrary	
 	0406_AI-Prompts	
 	TwinmotionUserLibrary_2025
-
-@template AssetCategories
-_3DPrint
-_AdobeSubstance
-_Audio
-_Bitmaps
-_Characters2D
-_Characters3D
-_CharactersAnimated
-_Decals
-_HDRI
-_Lights-IES
-_Logos
-_Materials
-_Megascans
-_Objects
-_Tools
-_Vegetation
-_Vehicles
-_Video
-Poly_Haven
