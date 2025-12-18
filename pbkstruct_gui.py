@@ -1,242 +1,165 @@
-# PBKSTRUCT GUI + ENGINE
-# =====================
-# Full-featured PBKSTRUCT processor
-
+import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-from pathlib import Path
-import re
-from typing import List, Dict, Tuple
 
-# ============================================================
-# NODE MODEL
-# ============================================================
+# ----------------------------
+# PBK Struct Parser (unchanged)
+# ----------------------------
+class PBKStructParser:
+    def __init__(self, filepath):
+        self.filepath = filepath
+        self.definitions = {}   # e.g., states, cities
+        self.templates = {}     # e.g., Projects, AssetLibrary
+        self.root_structure = []
 
-class Node:
-    def __init__(self, name: str):
-        self.name = name
-        self.children: List['Node'] = []
+    def parse(self):
+        with open(self.filepath, "r") as f:
+            lines = [line.rstrip("\n") for line in f if line.strip() and not line.strip().startswith("#")]
 
-    def add(self, node: 'Node'):
-        self.children.append(node)
+        current_def = None
+        current_template = None
+        stack = []
+        for line in lines:
+            stripped = line.lstrip("\t")
+            indent = len(line) - len(stripped)
+            name = stripped
 
-    def clone(self):
-        n = Node(self.name)
-        n.children = [c.clone() for c in self.children]
-        return n
+            if line.startswith("@define"):
+                current_def = line.split()[1]
+                self.definitions[current_def] = {}
+                current_template = None
+            elif line.startswith("@template"):
+                current_template = line.split()[1]
+                self.templates[current_template] = []
+                current_def = None
+            elif line.startswith("@root"):
+                stack = [(self.root_structure, -1)]
+                current_def = None
+                current_template = None
+            elif current_def:
+                if indent == 1:
+                    parts = name.split(maxsplit=1)
+                    if len(parts) == 2:
+                        key, val = parts
+                        self.definitions[current_def][key] = val.strip('"')
+            elif current_template:
+                self.templates[current_template].append((indent, name))
+            elif stack:
+                while stack and indent <= stack[-1][1]:
+                    stack.pop()
+                parent_list = stack[-1][0]
+                new_item = {"name": name, "children": []}
+                parent_list.append(new_item)
+                stack.append((new_item["children"], indent))
 
-    def walk(self, base: Path, dry: bool = True):
-        path = base / self.name
-        if dry:
-            print("[DRY]", path)
-        else:
-            path.mkdir(parents=True, exist_ok=True)
-            print("[OK] ", path)
-        for c in self.children:
-            c.walk(path, dry)
+# ----------------------------
+# Build full tree
+# ----------------------------
+def build_full_tree(struct, definitions, templates):
+    result = []
+    for item in struct:
+        if isinstance(item, dict):
+            result.append({
+                "name": item["name"],
+                "children": build_full_tree(item["children"], definitions, templates)
+            })
+        elif isinstance(item, str):
+            if item.startswith("@expand"):
+                key = item.split()[1]
+                if key in definitions:
+                    for k, v in definitions[key].items():
+                        children = []
+                        if f"cities {k}" in definitions:
+                            for ck, cv in definitions[f"cities {k}"].items():
+                                children.append({"name": ck, "children":[]})
+                        result.append({"name": k, "children": children})
+            elif item.startswith("@insert"):
+                key = item.split()[1]
+                if key in templates:
+                    for _, name in templates[key]:
+                        result.append({"name": name, "children":[]})
+    return result
 
-# ============================================================
-# PARSER
-# ============================================================
+# ----------------------------
+# Helper: Convert tree to text
+# ----------------------------
+def tree_to_text(tree, indent=0):
+    lines = []
+    for node in tree:
+        lines.append("    " * indent + node["name"])
+        if node["children"]:
+            lines.extend(tree_to_text(node["children"], indent+1))
+    return lines
 
-DIRECTIVE_RE = re.compile(r'^@(\w+)(?:\s+(.*))?$')
-DEFINE_ITEM_RE = re.compile(r'^([A-Z0-9_]+)(?:\s+"(.+)")?$')
+# ----------------------------
+# GUI App
+# ----------------------------
+class FolderGenApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("PBK VizLab Folder Generator")
+        self.parser = None
+        self.tree_data = []
 
-class PBKStruct:
-    def __init__(self):
-        self.meta = {}
-        self.root_lines = []
-        self.defines = {}        
-        self.templates = {}      
-        self.errors: List[str] = []
+        # GUI Elements
+        self.file_label = tk.Label(root, text="No template loaded")
+        self.file_label.pack(pady=5)
+        tk.Button(root, text="Load Template", command=self.load_template).pack(pady=5)
 
-    def parse(self, text: str):
-        lines = text.splitlines()
-        current_block = None
-        current_key = None
-        indent_stack = [0]
+        self.tree_frame = tk.Frame(root)
+        self.tree_frame.pack(padx=10, pady=10, fill="both", expand=True)
+        self.tree = ttk.Treeview(self.tree_frame)
+        self.tree.pack(fill="both", expand=True)
 
-        DIRECTIVE_RE = re.compile(r'^@(\w+)(?:\s+(.*))?$')
-        DEFINE_ITEM_RE = re.compile(r'^([A-Z0-9_]+)(?:\s+"(.+)")?$')
+        btn_frame = tk.Frame(root)
+        btn_frame.pack(pady=5)
 
-        for lineno, raw in enumerate(lines, 1):
-            line = raw.rstrip("\n")
-            stripped = line.strip()
-            if not stripped or stripped.startswith('#'):
-                continue
+        tk.Button(btn_frame, text="Generate Folders", command=self.generate_folders).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Copy Proposed Structure", command=self.copy_structure).pack(side="left", padx=5)
 
-            # count leading whitespace (spaces or tabs)
-            indent = len(line) - len(line.lstrip())
-
-            # ---- directive
-            m = DIRECTIVE_RE.match(stripped)
-            if m and indent == 0:
-                current_block = m.group(1)
-                current_key = m.group(2)
-
-                if current_block in ('version', 'name'):
-                    self.meta[current_block] = current_key
-                elif current_block == 'root':
-                    self.root_lines = []
-                elif current_block == 'define':
-                    self.defines.setdefault(current_key, {})
-                elif current_block == 'template':
-                    self.templates[current_key] = []
-                continue
-
-            # ---- check indentation
-            if indent > indent_stack[-1]:
-                indent_stack.append(indent)
-            else:
-                while indent < indent_stack[-1]:
-                    indent_stack.pop()
-                if indent != indent_stack[-1]:
-                    self.errors.append(f"Line {lineno}: unexpected indent level")
-
-            # ---- parse content
-            content = line.lstrip()
-            if current_block == 'root':
-                self.root_lines.append(content)
-            elif current_block == 'define':
-                m2 = DEFINE_ITEM_RE.match(content)
-                if not m2:
-                    self.errors.append(f"Line {lineno}: expected CODE \"Label\"")
-                    continue
-                code, label = m2.group(1), m2.group(2) or m2.group(1)
-                self.defines[current_key][code] = label
-            elif current_block == 'template':
-                self.templates[current_key].append(content)
-            else:
-                self.errors.append(f"Line {lineno}: unknown block @{current_block}")
-
-        return self.errors
-
-# ============================================================
-# TEMPLATE / EXPANSION ENGINE
-# ============================================================
-
-def build_template(lines: List[str], templates: Dict[str,List[str]]) -> List[Node]:
-    stack: List[Tuple[int, Node]] = []
-    roots: List[Node] = []
-
-    for raw in lines:
-        indent = len(raw) - len(raw.lstrip(' '))
-        content = raw.strip()
-
-        if content.startswith('@insert'):
-            name = content.split()[1]
-            if name not in templates:
-                raise ValueError(f"Template {name} not found")
-            nodes = build_template(templates[name], templates)
-            if stack:
-                for n in nodes:
-                    stack[-1][1].add(n)
-            else:
-                roots.extend(nodes)
-            continue
-
-        node = Node(content)
-        while stack and stack[-1][0] >= indent:
-            stack.pop()
-
-        if stack:
-            stack[-1][1].add(node)
-        else:
-            roots.append(node)
-
-        stack.append((indent, node))
-
-    return roots
-
-def build_root(struct: PBKStruct) -> List[Node]:
-    roots: List[Node] = []
-
-    for line in struct.root_lines:
-        stripped = line.strip()
-        if stripped.startswith('@expand'):
-            parts = stripped.split()
-            if len(parts) != 2:
-                struct.errors.append(f"Invalid @expand line: {line}")
-                continue
-            _, key = parts
-            if key == 'states':
-                for state_code, state_name in struct.defines.get(('states',''), {}).items():
-                    s_node = Node(state_code)
-                    city_key = ('cities', state_code)
-                    if city_key in struct.defines:
-                        for city_code in struct.defines[city_key]:
-                            c_node = Node(city_code)
-                            s_node.add(c_node)
-                    roots.append(s_node)
-            continue
-
-        if stripped.startswith('@insert'):
-            name = stripped.split()[1]
-            if name not in struct.templates:
-                struct.errors.append(f"Template {name} not found")
-                continue
-            roots.extend(build_template(struct.templates[name], struct.templates))
-        else:
-            roots.append(Node(stripped))
-
-    return roots
-
-# ============================================================
-# GUI
-# ============================================================
-
-class PBKStructGUI(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("PBKSTRUCT Generator")
-        self.geometry("1000x600")
-
-        self.text = tk.Text(self)
-        self.text.pack(fill='both', expand=True)
-
-        btns = ttk.Frame(self)
-        btns.pack(fill='x')
-
-        ttk.Button(btns, text="Load", command=self.load).pack(side='left')
-        ttk.Button(btns, text="Preview", command=self.preview).pack(side='left')
-        ttk.Button(btns, text="Apply", command=self.apply).pack(side='left')
-
-    def load(self):
-        path = filedialog.askopenfilename(filetypes=[('PBKSTRUCT','*.pbkstruct')])
-        if not path:
+    def load_template(self):
+        file_path = filedialog.askopenfilename(filetypes=[("PBK Struct Files","*.pbkstruct")])
+        if not file_path:
             return
-        self.text.delete('1.0','end')
-        self.text.insert('1.0', Path(path).read_text(encoding='utf-8'))
+        self.parser = PBKStructParser(file_path)
+        self.parser.parse()
+        self.tree_data = build_full_tree(self.parser.root_structure, self.parser.definitions, self.parser.templates)
+        self.file_label.config(text=f"Loaded: {os.path.basename(file_path)}")
+        self.populate_tree()
 
-    def parse(self) -> PBKStruct:
-        s = PBKStruct()
-        s.parse(self.text.get('1.0','end'))
-        return s
+    def populate_tree(self):
+        self.tree.delete(*self.tree.get_children())
+        def insert_items(parent, children):
+            for child in children:
+                node = self.tree.insert(parent, "end", text=child["name"])
+                if child["children"]:
+                    insert_items(node, child["children"])
+        insert_items("", self.tree_data)
 
-    def preview(self):
-        s = self.parse()
-        if s.errors:
-            messagebox.showerror("Parse Errors", "\n".join(s.errors))
+    def generate_folders(self):
+        target = filedialog.askdirectory()
+        if not target:
             return
-        roots = build_root(s)
-        messagebox.showinfo("Preview", f"Parsed {len(roots)} root nodes")
+        def create_items(base, children):
+            for child in children:
+                path = os.path.join(base, child["name"])
+                os.makedirs(path, exist_ok=True)
+                create_items(path, child["children"])
+        create_items(target, self.tree_data)
+        messagebox.showinfo("Done", f"Folders generated at {target}")
 
-    def apply(self):
-        outdir = filedialog.askdirectory()
-        if not outdir:
-            return
-        s = self.parse()
-        if s.errors:
-            messagebox.showerror("Parse Errors", "\n".join(s.errors))
-            return
-        roots = build_root(s)
-        for r in roots:
-            r.walk(Path(outdir), dry=False)
-        messagebox.showinfo("Done", "Filesystem generated successfully ✅")
+    def copy_structure(self):
+        lines = tree_to_text(self.tree_data)
+        text = "\n".join(lines)
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        messagebox.showinfo("Copied", "Proposed folder structure copied to clipboard.")
 
-# ============================================================
-# MAIN
-# ============================================================
-
-if __name__ == '__main__':
-    PBKStructGUI().mainloop()
+# ----------------------------
+# Run App
+# ----------------------------
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = FolderGenApp(root)
+    root.geometry("800x700")
+    root.mainloop()
