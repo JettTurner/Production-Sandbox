@@ -1,0 +1,69 @@
+@version 1.0
+@name PBK Project Creation Project Management Structure
+
+#---Root---
+@root
+DOMAIN
+	@insert EVENT_TEMP
+	@insert PROJ_TEMP
+	@insert TASK_TEMP
+	@insert PHASE_TEMP
+	@insert USER_TEMP
+APPLICATION
+	Events
+	Services
+	Workflows
+	Commands
+INFRASTRUCTURE
+	Eventsstorage
+	Cache
+	Config
+	Logging
+UI
+	Componenets
+	Views
+	Themes
+	Icons
+Shared
+Test
+
+#--- Templates ---
+@template PROJ_TEMP
+	Project
+		Project.Types
+		Project.Schema
+		Project.Model
+		Project.Logic
+		Project.Errors
+
+@template EVENT_TEMP
+	Event
+		Event.Types
+		Event.Schema
+		Event.Model
+		Event.Logic
+		Event.Errors
+
+@template TASK_TEMP
+	Task
+		Task.Types
+		Task.Schema
+		Task.Model
+		Task.Logic
+		Task.Errors
+
+@template PHASE_TEMP
+	Phase
+		Phase.Types
+		Phase.Schema
+		Phase.Model
+		Phase.Logic
+		Phase.Errors
+
+@template USER_TEMP
+	User
+		User.Types
+		User.Schema
+		User.Model
+		User.Logic
+		User.Errors
