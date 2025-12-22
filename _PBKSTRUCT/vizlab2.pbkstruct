@@ -1,0 +1,140 @@
+@version 0.1
+@name PBK VizLab Structure
+
+#---Root---
+@root
+00_Sandbox
+01_VL
+02_VR
+    01_VR
+    02_3D
+    03_AI
+    04_GP
+    05_PR
+04_AssetLibrary
+    @insert AssetLibrary
+05_Reference
+06_Receipts
+07_Archive
+08_TwimotionUserLibrary
+
+
+#---Templates---
+@template VIZProject
+    00_Progress
+    01_Deliverables
+    02_Links
+        PluginsLINK:U:\PBK\SanAntonio\Design\04_AssetsPluginsTemplates
+    03_Reference
+    04_Project
+        0401_ProjectFiles
+            Blender
+            Revit
+            Sketchup
+            Twinmotion
+            Illustrator
+            Photoshop
+            D5
+        0402_PostProcess
+            PP
+            Logos
+            Audio
+    05_Correspondance
+    06_PR
+
+@template AssetLibrary
+    _Materials
+        _Glass 
+        _Metal 
+        _Concrete 
+        _Wood 
+        _Stones 
+        _Brick 
+        _Ground 
+        _Plastic 
+        _WallCoverings 
+        _RoofCoverings 
+        _Ceilings 
+        _Grids 
+        _MarbleAndGranite 
+        _Tiles 
+        _Fabric 
+        _Leather 
+        _InteriorMapping 
+        _CarPaint 
+        _Tire 
+        _Facades 
+    _Vegetation
+        _Coastal  
+            _Trees
+            _Bushes
+            _GrassesAndFlowers
+            _Rocks
+            _Misc
+        _Central  
+            _Trees
+            _Bushes
+            _GrassesAndFlowers
+            _Rocks
+            _Misc
+        _Desert 
+            _Trees
+            _Bushes
+            _GrassesAndFlowers
+            _Rocks
+            _Misc
+        _PacificNothwest 
+            _Trees
+            _Bushes
+            _GrassesAndFlowers
+            _Rocks
+            _Misc
+    _Objects
+        @insert mainSplit
+        _Library 
+        _ClutterObjects 
+        _CityAndCampus 
+        _Background 
+    _Lights-IES 
+    _HDRI
+        _Skies 
+        _Indoor 
+        _Outdoor 
+        _Studio 
+    _Megascans
+    _AdobieSubstance
+    _Tools
+    _Vehicles
+        _Cars 
+        _Trucks 
+        _Buses 
+        _Electric 
+        _Other 
+    _Characters2D
+        @insert mainSplit
+    _Characters3D
+        @insert mainSplit
+    _CharactersAnimated
+        @insert mainSplit
+    
+@template mainSplit
+    _Sports  
+        Basketball(_Basketball)
+        Football(_Football)
+        Soccer(_Soccer)
+        VolleyBall(_VolleyBall)
+        Tennis(_Tennis)
+    _College 
+    _HighSchool 
+    _MiddleSchool 
+    _ElementarySchool 
+    _SpecialtyPrograms  
+        _Woodshop
+        _Welding
+        _Automotive
+        _Robotics
+        _Nursing
+        _Engineering
+        _Makerspace
+    _Entertaiment 
+    _Retail 
