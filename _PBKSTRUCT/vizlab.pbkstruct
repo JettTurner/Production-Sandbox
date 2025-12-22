@@ -89,6 +89,10 @@
 05_Reference
 06_Receipts
 07_Archive
+#@insert A
+#@insert B
+#@insert C
+
 
 #---Templates---
 @template TestProjects
@@ -192,11 +196,14 @@
 
 #---examples for testing ---
 @template A
-    FolderName
+    ARootFolder
+		FolderName
 
 @template B
-    @insert A
+	BRootFolder
+		@insert A
 
-@template c
-	@insert A
-	@insert B
+@template C
+	CRootFolder
+		@insert A
+		@insert B

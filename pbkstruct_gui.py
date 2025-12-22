@@ -2,24 +2,40 @@ import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-# ==========================================
+# ============================================================
+# Custom Errors
+# ============================================================
+
+class TemplateRecursionError(Exception):
+    pass
+
+class TemplateNotFoundError(Exception):
+    pass
+
+
+# ============================================================
 # PBK Struct Parser
-# ==========================================
+# ============================================================
+
 class PBKStructParser:
     """
     Parses a PBK .pbkstruct file into:
-    - root_structure: list of dict nodes representing folders
-    - templates: dict mapping template names to nested folder trees
+    - root_structure: list of dict nodes
+    - templates: dict[str, list[dict]]
     """
 
     def __init__(self, filepath):
         self.filepath = filepath
-        self.templates = {}  # name -> list of nested dict nodes
+        self.templates = {}
         self.root_structure = []
 
     def parse(self):
-        with open(self.filepath, "r") as f:
-            lines = [line.rstrip("\n") for line in f if line.strip() and not line.strip().startswith("#")]
+        with open(self.filepath, "r", encoding="utf-8") as f:
+            lines = [
+                line.rstrip("\n")
+                for line in f
+                if line.strip() and not line.strip().startswith("#")
+            ]
 
         current_template = None
         root_stack = []
@@ -27,195 +43,224 @@ class PBKStructParser:
         for line in lines:
             stripped = line.lstrip("\t")
             indent = len(line) - len(stripped)
-            name = stripped
+            name = stripped.strip()
 
-            # --- Handle template definition ---
-            if line.startswith("@template"):
-                current_template = line.split()[1]
+            # -------------------------------
+            # Template declaration
+            # -------------------------------
+            if name.startswith("@template"):
+                current_template = name.split()[1]
                 self.templates[current_template] = []
                 continue
 
-            # --- Handle root structure ---
-            elif line.startswith("@root"):
+            # -------------------------------
+            # Root declaration
+            # -------------------------------
+            if name == "@root":
+                current_template = None
                 self.root_structure = []
-                root_stack = [(self.root_structure, -1)]  # dummy root node
+                root_stack = [(self.root_structure, -1)]
                 continue
 
+            # -------------------------------
+            # Inside template
+            # -------------------------------
             if current_template:
-                # Append template line (indent, name) for later parsing
                 self.templates[current_template].append((indent, name))
-            else:
-                # Build root structure tree
-                while root_stack and indent <= root_stack[-1][1]:
-                    root_stack.pop()
-                if not root_stack:
-                    # safety fallback
-                    root_stack = [(self.root_structure, -1)]
-                parent_list = root_stack[-1][0]
-                new_item = {"name": name.strip(), "children": []}  # strip whitespace
-                parent_list.append(new_item)
-                root_stack.append((new_item["children"], indent))
+                continue
 
-        # --- Convert all templates into nested trees ---
+            # -------------------------------
+            # Root structure node
+            # -------------------------------
+            while root_stack and indent <= root_stack[-1][1]:
+                root_stack.pop()
+
+            parent = root_stack[-1][0] if root_stack else self.root_structure
+            node = {"name": name, "children": []}
+            parent.append(node)
+            root_stack.append((node["children"], indent))
+
+        # Parse templates into trees
         for key, lines in self.templates.items():
-            self.templates[key] = self.parse_template(lines)
+            self.templates[key] = self._parse_template_lines(lines)
 
-    # ----------------------------------
-    def parse_template(self, lines):
-        """
-        Convert a template (list of (indent, name)) into a nested tree
-        """
+    def _parse_template_lines(self, lines):
         stack = []
         root = []
 
         for indent, name in lines:
-            node = {"name": name.strip(), "children": []}  # strip whitespace
+            node = {"name": name.strip(), "children": []}
+
             while stack and indent <= stack[-1][1]:
                 stack.pop()
+
             if stack:
                 stack[-1][0].append(node)
             else:
                 root.append(node)
+
             stack.append((node["children"], indent))
+
         return root
 
-# ==========================================
-# Recursive @insert Resolver
-# ==========================================
-def resolve_node(node, templates):
+
+# ============================================================
+# Recursive Insert Resolver (WITH CYCLE DETECTION)
+# ============================================================
+
+def resolve_node(node, templates, stack):
     """
-    Recursively resolves a node dictionary.
-    Replaces @insert <template> with the template tree.
+    Resolve a single node.
+    `stack` tracks template expansion to detect recursion.
     """
-    resolved = []
     name = node["name"]
-    children = node.get("children", [])
 
+    # -------------------------------
+    # Handle @insert
+    # -------------------------------
     if name.startswith("@insert"):
-        key = name.split()[1]
-        if key in templates:
-            for tn in templates[key]:
-                resolved.extend(resolve_node(tn, templates))
-    else:
-        resolved_children = []
-        for child in children:
-            resolved_children.extend(resolve_node(child, templates))
-        resolved.append({"name": name, "children": resolved_children})
+        template_name = name.split()[1]
 
-    return resolved
+        if template_name not in templates:
+            raise TemplateNotFoundError(f"Template '{template_name}' not found")
+
+        if template_name in stack:
+            cycle = " → ".join(stack + [template_name])
+            raise TemplateRecursionError(f"Template recursion detected: {cycle}")
+
+        resolved = []
+        for child in templates[template_name]:
+            resolved.extend(
+                resolve_node(child, templates, stack + [template_name])
+            )
+        return resolved
+
+    # -------------------------------
+    # Normal folder node
+    # -------------------------------
+    resolved_children = []
+    for child in node.get("children", []):
+        resolved_children.extend(resolve_node(child, templates, stack))
+
+    return [{
+        "name": name,
+        "children": resolved_children
+    }]
+
 
 def resolve_tree(tree, templates):
-    """
-    Resolve a list of nodes (root structure)
-    """
-    full_tree = []
+    resolved = []
     for node in tree:
-        full_tree.extend(resolve_node(node, templates))
-    return full_tree
+        resolved.extend(resolve_node(node, templates, []))
+    return resolved
 
-# ==========================================
+
+# ============================================================
 # Helper: Convert tree to text
-# ==========================================
+# ============================================================
+
 def tree_to_text(tree, indent=0):
-    """
-    Converts nested tree to text lines with indentation
-    """
     lines = []
     for node in tree:
         lines.append("    " * indent + node["name"])
         if node["children"]:
-            lines.extend(tree_to_text(node["children"], indent+1))
+            lines.extend(tree_to_text(node["children"], indent + 1))
     return lines
 
-# ==========================================
+
+# ============================================================
 # GUI Application
-# ==========================================
+# ============================================================
+
 class FolderGenApp:
     def __init__(self, root):
         self.root = root
         self.root.title("PBK VizLab Folder Generator")
+
         self.parser = None
         self.tree_data = []
 
-        # --- GUI Widgets ---
+        # UI
         self.file_label = tk.Label(root, text="No template loaded")
         self.file_label.pack(pady=5)
+
         tk.Button(root, text="Load Template", command=self.load_template).pack(pady=5)
 
-        self.tree_frame = tk.Frame(root)
-        self.tree_frame.pack(padx=10, pady=10, fill="both", expand=True)
-        self.tree = ttk.Treeview(self.tree_frame)
-        self.tree.pack(fill="both", expand=True)
+        self.tree = ttk.Treeview(root)
+        self.tree.pack(fill="both", expand=True, padx=10, pady=10)
 
-        btn_frame = tk.Frame(root)
-        btn_frame.pack(pady=5)
-        tk.Button(btn_frame, text="Generate Folders", command=self.generate_folders).pack(side="left", padx=5)
-        tk.Button(btn_frame, text="Copy Proposed Structure", command=self.copy_structure).pack(side="left", padx=5)
+        btns = tk.Frame(root)
+        btns.pack(pady=5)
 
-    # --------------------------------------
+        tk.Button(btns, text="Generate Folders", command=self.generate_folders).pack(side="left", padx=5)
+        tk.Button(btns, text="Copy Proposed Structure", command=self.copy_structure).pack(side="left", padx=5)
+
+    # --------------------------------------------------------
+
     def load_template(self):
-        """
-        Load .pbkstruct file, parse, resolve inserts, and populate treeview
-        """
-        file_path = filedialog.askopenfilename(filetypes=[("PBK Struct Files","*.pbkstruct")])
-        if not file_path:
+        path = filedialog.askopenfilename(filetypes=[("PBK Struct Files", "*.pbkstruct")])
+        if not path:
             return
-        self.parser = PBKStructParser(file_path)
-        self.parser.parse()
-        self.tree_data = resolve_tree(self.parser.root_structure, self.parser.templates)
-        self.file_label.config(text=f"Loaded: {os.path.basename(file_path)}")
+
+        try:
+            self.parser = PBKStructParser(path)
+            self.parser.parse()
+            self.tree_data = resolve_tree(self.parser.root_structure, self.parser.templates)
+        except (TemplateRecursionError, TemplateNotFoundError) as e:
+            messagebox.showerror("Template Error", str(e))
+            return
+        except Exception as e:
+            messagebox.showerror("Parse Error", str(e))
+            return
+
+        self.file_label.config(text=f"Loaded: {os.path.basename(path)}")
         self.populate_tree()
 
     def populate_tree(self):
-        """
-        Populate the Tkinter treeview with the fully resolved tree
-        """
         self.tree.delete(*self.tree.get_children())
-        def insert_items(parent, children):
-            for child in children:
-                node = self.tree.insert(parent, "end", text=child["name"])
-                if child["children"]:
-                    insert_items(node, child["children"])
-        insert_items("", self.tree_data)
 
-    # --------------------------------------
+        def insert(parent, nodes):
+            for node in nodes:
+                nid = self.tree.insert(parent, "end", text=node["name"])
+                insert(nid, node["children"])
+
+        insert("", self.tree_data)
+
+    # --------------------------------------------------------
+
     def generate_folders(self):
-        """
-        Generate folders on disk based on resolved tree
-        """
         target = filedialog.askdirectory()
         if not target:
             return
 
-        def create_items(base, children):
-            for child in children:
-                # Build full path safely
-                path = os.path.join(base, child["name"])
-                os.makedirs(path, exist_ok=True)
-                create_items(path, child["children"])
-
         try:
-            create_items(target, self.tree_data)
-            messagebox.showinfo("Done", f"Folders generated at {target}")
+            self._create_items(target, self.tree_data)
+            messagebox.showinfo("Done", "Folders generated successfully.")
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to generate folders:\n{e}")
+            messagebox.showerror("Filesystem Error", str(e))
 
-    # --------------------------------------
+    def _create_items(self, base, nodes):
+        for node in nodes:
+            safe_name = node["name"].strip()
+            path = os.path.join(base, safe_name)
+            os.makedirs(path, exist_ok=True)
+            self._create_items(path, node["children"])
+
+    # --------------------------------------------------------
+
     def copy_structure(self):
-        """
-        Copy the fully resolved folder structure as text to clipboard
-        """
-        lines = tree_to_text(self.tree_data)
-        text = "\n".join(lines)
+        text = "\n".join(tree_to_text(self.tree_data))
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
-        messagebox.showinfo("Copied", "Proposed folder structure copied to clipboard.")
+        messagebox.showinfo("Copied", "Structure copied to clipboard.")
 
-# ==========================================
-# Run Application
-# ==========================================
+
+# ============================================================
+# Run App
+# ============================================================
+
 if __name__ == "__main__":
     root = tk.Tk()
-    app = FolderGenApp(root)
     root.geometry("900x700")
+    FolderGenApp(root)
     root.mainloop()
