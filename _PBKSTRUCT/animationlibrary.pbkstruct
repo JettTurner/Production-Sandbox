@@ -1,6 +1,16 @@
 @version 0.1
 @name ANIMATION Structure
 
+
+10–19  Admin / Meta
+20–29  Reference
+30–39  Pipeline / Tools
+40–69  Active Production
+70–79  Client Delivery
+90–99  Archive / Graveyard
+
+
+
 #---Root---
 @root
 _ARCHIVE
