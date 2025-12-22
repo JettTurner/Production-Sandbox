@@ -1,0 +1,33 @@
+@version 1.0
+@name Example Structure
+
+#---Root---
+@root
+Folder1
+	@insert A
+	@insert B
+	@insert C
+Folder2
+	@insert D
+
+
+#---examples for testing ---
+@template A
+    ARootFolder
+		FolderName
+
+@template B
+	BRootFolder
+		@insert A
+
+@template C
+	CRootFolder
+		@insert A
+		@insert B
+
+@template D
+	d1
+	d2
+	d3
+		@insert C
+	d4

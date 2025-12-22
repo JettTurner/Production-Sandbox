@@ -90,7 +90,7 @@
             _Rocks
             _Misc
     _Objects
-        @insert mainSplit
+        @insert ArchTypes
         _Library 
         _ClutterObjects 
         _CityAndCampus 
@@ -111,13 +111,13 @@
         _Electric 
         _Other 
     _Characters2D
-        @insert mainSplit
+        @insert ArchTypes
     _Characters3D
-        @insert mainSplit
+        @insert ArchTypes
     _CharactersAnimated
-        @insert mainSplit
+        @insert ArchTypes
     
-@template mainSplit
+@template ArchTypes
     _Sports  
         Basketball(_Basketball)
         Football(_Football)
