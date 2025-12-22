@@ -1,4 +1,4 @@
-@version 2.1
+@version 3.0
 @name PBK Project Creation Project Management Structure
 
 #---Root---
@@ -26,6 +26,7 @@ APPLICATION
 	validators
 		project_validator.py
 		task_validator.py
+		user_validator.py
 	workflows
 		project_lifecycle.py
 		phase_progress.py
@@ -86,17 +87,24 @@ TEST
 		test_task.py
 		test_phase.py
 		test_user.py
+		test_role.py
+		test_notification.py
+		test_history.py
 	application
 		test_commands.py
 		test_queries.py
+		test_validators.py
+		test_workflows.py
 	infrastructure
 		test_storage.py
 		test_events.py
+		test_cache.py
+		test_background_jobs.py
 	ui
 		test_components.py
 		test_views.py
 integration
-	test_workflows.py
+	test_integration_workflows.py
 README.md
 CHANGELOG.md
 CONTRIBUTING.md
@@ -125,7 +133,7 @@ CONTRIBUTING.md
 		phase_paused.event.py
 		phase_completed.event.py
 		phase_skipped.event.py
-		phase_changed.event.py  # for generic phase state changes
+		phase_changed.event.py
 
 	# User / Role Events
 		user_created.event.py
