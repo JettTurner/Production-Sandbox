@@ -1,4 +1,4 @@
-@version 1.1
+@version 1.2
 @name PBK VizLab Structure
 
 #---Root---
@@ -6,78 +6,78 @@
 01_EXT
 	CA
 		ANH
-			@insert TestProjects
+			@insert TestClients
 		BKF
-			@insert TestProjects
+			@insert TestClients
 		BER
-			@insert TestProjects
+			@insert TestClients
 		FOL
-			@insert TestProjects
+			@insert TestClients
 		FRE
-			@insert TestProjects
+			@insert TestClients
 		LAX
-			@insert TestProjects
+			@insert TestClients
 		RCH
-			@insert TestProjects
+			@insert TestClients
 		SDG
-			@insert TestProjects
+			@insert TestClients
 		SLO
-			@insert TestProjects
+			@insert TestClients
 	FL
 		CGB
-			@insert TestProjects
+			@insert TestClients
 		FMY
-			@insert TestProjects
+			@insert TestClients
 		JAX
-			@insert TestProjects
+			@insert TestClients
 		ORL
-			@insert TestProjects
+			@insert TestClients
 		SRQ
-			@insert TestProjects
+			@insert TestClients
 		STP
-			@insert TestProjects
+			@insert TestClients
 		TPA
-			@insert TestProjects
+			@insert TestClients
 		WPB
-			@insert TestProjects
+			@insert TestClients
 	GA
 		GRF
-			@insert TestProjects
+			@insert TestClients
 		SGH
-			@insert TestProjects
+			@insert TestClients
 	MD
 		BAL
-			@insert TestProjects
+			@insert TestClients
 	SC
 		GVL
-			@insert TestProjects
+			@insert TestClients
 		RKH
-			@insert TestProjects
+			@insert TestClients
 	TX
 		AUS
-			@insert TestProjects
+			@insert TestClients
 		DAL
-			@insert TestProjects
+			@insert TestClients
 		DEN
-			@insert TestProjects
+			@insert TestClients
 		FBN
-			@insert TestProjects
+			@insert TestClients
 		FWT
-			@insert TestProjects
+			@insert TestClients
 		HOU
-			@insert TestProjects
+			@insert TestClients
 		KTY
-			@insert TestProjects
+			@insert TestClients
 		SAT
-			@insert TestProjects
+			@insert TestClients
 		WDL
-			@insert TestProjects
+			@insert TestClients
 	VA
 		RIC
-			@insert TestProjects
+			@insert TestClients
 	WA
 		TCM
-			@insert TestProjects
+			@insert TestClients
 02_INT
 	0201_VR
 	0202_3D
@@ -92,92 +92,57 @@
 
 #---Templates---
 @template TestProjects
+	CL1_00001_VL_TestProjectName_TX_SAN_VZLB_IN
+		00_ProgressImages
+		01_Deliverables
+		02_Links
+		03_ReferenceFiles
+		04_ProjectFiles
+		05_PostProcess
+		06_Correspondence
+	CL1_00002_VL_TestProjectName_TX_SAN_VZLB_IN
+		00_ProgressImages
+		01_Deliverables
+		02_Links
+		03_ReferenceFiles
+		04_ProjectFiles
+		05_PostProcess
+		06_Correspondence
+	CL1_00003_AI_TestProjectName_TX_SAN_VZLB_IN
+		00_ProgressImages
+		01_Deliverables
+		02_Links
+		03_ReferenceFiles
+		04_ProjectFiles
+		05_PostProcess
+		06_Correspondence
+	CL1_00004_GP_TestProjectName_TX_SAN_VZLB_IN
+		00_ProgressImages
+		01_Deliverables
+		02_Links
+		03_ReferenceFiles
+		04_ProjectFiles
+		05_PostProcess
+		06_Correspondence
+	CL1_00005_VL_TestProjectName_TX_SAN_VZLB_IN
+		00_ProgressImages
+		01_Deliverables
+		02_Links
+		03_ReferenceFiles
+		04_ProjectFiles
+		05_PostProcess
+		06_Correspondence
+
+@template TestClients
 	CLIENT1
 		_Deliverables
-		CLIENT1_00001_VL_TestProjectName_TX_SAN_VZLB_IN
-			00_ProgressImages
-			01_Deliverables
-			02_Links
-			03_ReferenceFiles
-			04_ProjectFiles
-			05_PostProcess
-			06_Correspondence
-		CLIENT1_00002_VL_TestProjectName_TX_SAN_VZLB_IN
-			00_ProgressImages
-			01_Deliverables
-			02_Links
-			03_ReferenceFiles
-			04_ProjectFiles
-			05_PostProcess
-			06_Correspondence
-		CLIENT1_00003_AI_TestProjectName_TX_SAN_VZLB_IN
-			00_ProgressImages
-			01_Deliverables
-			02_Links
-			03_ReferenceFiles
-			04_ProjectFiles
-			05_PostProcess
-			06_Correspondence
-		CLIENT1_00004_GP_TestProjectName_TX_SAN_VZLB_IN
-			00_ProgressImages
-			01_Deliverables
-			02_Links
-			03_ReferenceFiles
-			04_ProjectFiles
-			05_PostProcess
-			06_Correspondence
-		CLIENT1_00005_VL_TestProjectName_TX_SAN_VZLB_IN
-			00_ProgressImages
-			01_Deliverables
-			02_Links
-			03_ReferenceFiles
-			04_ProjectFiles
-			05_PostProcess
-			06_Correspondence
+		@insert TestProjects
 	CLIENT2
 		_Deliverables
-		CLIENT2_00001_3D_TestProjectName_TX_SAN_VZLB_IN
-			00_ProgressImages
-			01_Deliverables
-			02_Links
-			03_ReferenceFiles
-			04_ProjectFiles
-			05_PostProcess
-			06_Correspondence
-		CLIENT2_00002_VL_TestProjectName_TX_SAN_VZLB_IN
-			00_ProgressImages
-			01_Deliverables
-			02_Links
-			03_ReferenceFiles
-			04_ProjectFiles
-			05_PostProcess
-			06_Correspondence
+		@insert TestProjects
 	CLIENT3
 		_Deliverables
-		CLIENT3_00001_AI_TestProjectName_TX_SAN_VZLB_IN
-			00_ProgressImages
-			01_Deliverables
-			02_Links
-			03_ReferenceFiles
-			04_ProjectFiles
-			05_PostProcess
-			06_Correspondence
-		CLIENT3_00002_GP_TestProjectName_TX_SAN_VZLB_IN
-			00_ProgressImages
-			01_Deliverables
-			02_Links
-			03_ReferenceFiles
-			04_ProjectFiles
-			05_PostProcess
-			06_Correspondence
-		CLIENT3_00003_VL_TestProjectName_TX_SAN_VZLB_IN
-			00_ProgressImages
-			01_Deliverables
-			02_Links
-			03_ReferenceFiles
-			04_ProjectFiles
-			05_PostProcess
-			06_Correspondence
+		@insert TestProjects
 
 @template AssetLibrary
 	0400_Programs
@@ -222,3 +187,16 @@
 	0405_TwinmotionUserLibrary	
 	0406_AI-Prompts	
 	TwinmotionUserLibrary_2025
+
+
+
+#---examples for testing ---
+@template A
+    FolderName
+
+@template B
+    @insert A
+
+@template c
+	@insert A
+	@insert B
