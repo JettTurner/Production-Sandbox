@@ -10,24 +10,65 @@ DOMAIN
 	@insert PHASE_TEMP
 	@insert USER_TEMP
 APPLICATION
-	Events
-	Services
-	Workflows
-	Commands
+	events
+		event_bus.py
+		event_handler.py
+		subscriptions.py
+	services
+		project_service.py
+		task_service.py
+		phase_service.py
+		cache_service.py			
+	workflows
+		project_lifecycle.??
+		phase_progress.??
+		asset_generation.??
+	commands
+		create_project.??
+		complete_task.??
+		advance_phase.??
 INFRASTRUCTURE
-	Eventsstorage
-	Cache
-	Config
-	Logging
+	events
+		in_memory_bus.??
+		file_event_store.??
+	storage
+		filesystem_store.??
+	cache
+		thumbnail_cache.??
+		metadata_cache.??
+	config
+		settings.??
+	logging
+		logger.py
 UI
-	Componenets
-	Views
-	Themes
-	Icons
-Shared
-Test
+	componenets
+		project_card.py
+		task_list.py
+		phase_bar.py
+	views
+		project_view.py
+		dashboard_view.py
+	themes
+		default_theme.??
+	icons
+SHARED
+	errors
+	constants
+	types
+TEST
+	domain
+	application
+	integration
+README.md
 
 #--- Templates ---
+@template EVENT_TEMP
+	Event
+		project_created.event
+		task_completed.event
+		phase_changed.event
+		cache_invalidated.event
+
 @template PROJ_TEMP
 	Project
 		Project.Types
@@ -35,14 +76,6 @@ Test
 		Project.Model
 		Project.Logic
 		Project.Errors
-
-@template EVENT_TEMP
-	Event
-		Event.Types
-		Event.Schema
-		Event.Model
-		Event.Logic
-		Event.Errors
 
 @template TASK_TEMP
 	Task
