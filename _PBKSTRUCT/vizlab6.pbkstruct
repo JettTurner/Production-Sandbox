@@ -1,0 +1,290 @@
+@version 1.4
+@name PBK Vizlab Structure
+
+#---Root---
+@root
+VIZLAB
+	01_VL
+		_2025
+			@insert TESTPROJECTSVL25
+		_2026
+			@insert TESTPROJECTSVL26
+	02_VR
+		_2025
+			@insert TESTPROJECTSVR25
+		_2026
+			@insert TESTPROJECTSVR26
+	03_PR
+		_2025
+			@insert TESTPROJECTSPR25
+		_2026
+			@insert TESTPROJECTSPR26
+	04_Library
+		@insert MAINLIBRARY
+	05_Tools
+		_Programs
+		_Plugins
+	06_Templates
+		_AI
+		_Blender
+		_Twinmotion
+		_D5
+		_Sketchup
+	07_Admin
+		_AccountsDetails
+			_Accounts
+			_APIandLICENSE
+		_Warranties
+		_Receipts
+		_Documents
+		_Tutorials
+	08_Archive
+		_VL
+			_2023
+			_2024
+		_VR
+			_2023
+			_2024
+		_PR
+			_2023
+			_2024
+
+#--- Asset Library ---	
+@template MAINLIBRARY
+	_3DPrint
+		@insert 3DPRINT
+	_AdobieSubstance
+	_Audio
+	_Arch_Res
+	_Arch_Com
+	_Arch_Mix
+	_Bitmaps
+	_Char_2D
+		@insert ARCHTYPES
+	_Char_3D
+		@insert ARCHTYPES
+	_Char_Anim
+		@insert ARCHTYPES
+	_Decals
+	_HDRI
+		@insert HDRI_LIB
+	_Lights-IES
+	_Logos
+	_Materials
+		@insert MAT_LIB
+	_Objects
+		@insert OBJ_LIB
+	_PolyHaven
+	_Vegitation
+		@insert VEG_LIB
+	_Vehicles
+		@insert VEHIC_LIB
+	_Video
+
+#--- Asset Types ---
+@template MAT_LIB
+	_Glass 
+	_Metal 
+	_Concrete 
+	_Wood 
+	_Stones 
+	_Brick 
+	_Ground 
+	_Plastic 
+	_WallCoverings 
+	_RoofCoverings 
+	_Ceilings 
+	_Grids 
+	_MarbleAndGranite 
+	_Tiles 
+	_Fabric 
+	_Leather 
+	_InteriorMapping 
+	_CarPaint 
+	_Tire 
+	_Facades
+
+@template VEG_LIB
+	_Coastal
+		@insert VEG_TYPES
+	_Central
+		@insert VEG_TYPES
+	_Desert
+		@insert VEG_TYPES
+	_PacificNothwest
+		@insert VEG_TYPES
+
+@template 3DPRINT
+	_1to30
+	_1to50
+	_1to100
+
+@template VEG_TYPES
+	_Trees
+	_Bushes
+	_GrassesAndFlowers
+	_Rocks
+	_Misc
+	
+@template OBJ_LIB
+	@insert ARCHTYPES
+	_Library 
+	_ClutterObjects 
+	_CityAndCampus 
+	_Background
+		
+@template HDRI_LIB
+	_Skies 
+	_Indoor 
+	_Outdoor 
+	_Studio 
+		
+@template VEHIC_LIB
+	_Cars 
+	_Trucks 
+	_Buses 
+	_Electric 
+	_Other 
+	
+@template ARCHTYPES
+	_Sports	 
+		Basketball(_Basketball)
+		Football(_Football)
+		Soccer(_Soccer)
+		VolleyBall(_VolleyBall)
+		Tennis(_Tennis)
+	_College 
+	_HighSchool 
+	_MiddleSchool 
+	_ElementarySchool 
+	_SpecialtyPrograms	
+		_Woodshop
+		_Welding
+		_Automotive
+		_Robotics
+		_Nursing
+		_Engineering
+		_Makerspace
+	_Entertaiment 
+	_Retail 
+
+#---Project default structure---
+@template PROJECT
+	00_ProgressImages
+		2026-02-02
+		2026-02-03
+		2026-02-04_01
+		2026-02-04_02
+		2026-02-04_Anim
+	01_Deliverables
+		2026-02-04_Anim
+	02_Links
+	03_ReferenceFiles
+	04_ProjectFiles
+		Blender
+		D5
+		Illustrator
+		Photoshop
+		Revit
+		Sketchup
+		Twinmotion
+	05_PostProcess
+		PP
+	06_Correspondence
+		2026-02-02_Request_01
+		2026-02-03_Info_01
+		2026-02-03_Info_02
+		2026-02-03_Info_03
+		2026-02-04_Critique_01
+
+#---Test Projects VL ---
+@template TESTPROJECTSVL25
+	250000_VL_Template_Project_TX_SAN_VZLB_IN
+		@insert PROJECT
+	250502_VL_Client-Name_Project-Name_TX_SAN_VZLB_IN
+		@insert PROJECT
+	250503_VL_Client-Name_Project-Name_TX_SAN_VZLB_IN
+		@insert PROJECT
+	250504_AI_Client-Name_Project-Name_TX_SAN_VZLB_IN
+		@insert PROJECT
+	250505_GP_Client-Name_Project-Name_TX_SAN_VZLB_IN
+		@insert PROJECT
+	250506_VL_Client-Name_Project-Name_TX_SAN_VZLB_IN
+		@insert PROJECT
+
+@template TESTPROJECTSVL26
+	260000_VL_Template_Project_TX_SAN_VZLB_IN
+		@insert PROJECT
+	260507_VL_Client-Name_Project-Name_TX_SAN_VZLB_IN
+		@insert PROJECT
+	260508_VL_Client-Name_Project-Name_TX_SAN_VZLB_IN
+		@insert PROJECT
+	260509_AI_Client-Name_Project-Name_TX_SAN_VZLB_IN
+		@insert PROJECT
+	260510_GP_Client-Name_Project-Name_TX_SAN_VZLB_IN
+		@insert PROJECT
+	260511_VL_Client-Name_Project-Name_TX_SAN_VZLB_IN
+		@insert PROJECT
+
+#---Test Projects VR ---	
+@template TESTPROJECTSVR25
+	250000_VR_Template_Project_TX_SAN_VZLB_IN
+		@insert PROJECT
+	250502_VR_DesignCompetiton_ForNewHire_TX_SAN_VZLB_IN
+		@insert PROJECT
+	250503_VR_Desktop_Background_TX_SAN_VZLB_IN
+		@insert PROJECT
+	250504_AI_Twimotion_Stylized-Rendering_TX_SAN_VZLB_IN
+		@insert PROJECT
+	250505_GP_Vizlab_Analytics_TX_SAN_VZLB_IN
+		@insert PROJECT
+	250506_3D_Substance_Designer_TX_SAN_VZLB_IN
+		@insert PROJECT
+
+@template TESTPROJECTSVR26
+	260000_VR_Template_Project_TX_SAN_VZLB_IN
+		@insert PROJECT
+	260502_VR_DesignCompetiton_ForNewHire_TX_SAN_VZLB_IN
+		@insert PROJECT
+	260503_VR_Desktop_Background_TX_SAN_VZLB_IN
+		@insert PROJECT
+	260504_AI_Twimotion_Stylized-Rendering_TX_SAN_VZLB_IN
+		@insert PROJECT
+	260505_GP_Vizlab_Analytics_TX_SAN_VZLB_IN
+		@insert PROJECT
+	260506_3D_Substance_Designer_TX_SAN_VZLB_IN
+		@insert PROJECT
+	
+#---Test Projects PR ---	
+@template TESTPROJECTSPR25
+	250000_Weekly
+		2025-01-05_PR_SizzleReel_Week-01
+		2025-01-12_PR_SizzleReel_Week-02
+		2025-01-19_PR_SizzleReel_Week-03
+		2025-01-26_PR_SizzleReel_Week-04
+		2025-02-02_PR_SizzleReel_Week-05
+		2025-02-09_PR_SizzleReel_Week-08
+		2025-02-16_PR_SizzleReel_Week-09
+		2025-02-23_PR_SizzleReel_Week-10
+		2025-03-02_PR_SizzleReel_Week-11
+	250001_GP_Vizlab_Logo_TX_SAN_VZLB_IN
+		@insert PROJECT
+	250002_AI_Vizlab_Tshirt-Designs_TX_SAN_VZLB_IN
+		@insert PROJECT
+
+
+@template TESTPROJECTSPR26
+	250000_Weekly
+		2026-01-05_PR_SizzleReel_Week-01
+		2026-01-12_PR_SizzleReel_Week-02
+		2026-01-19_PR_SizzleReel_Week-03
+		2026-01-26_PR_SizzleReel_Week-04
+		2026-02-02_PR_SizzleReel_Week-05
+		2026-02-09_PR_SizzleReel_Week-08
+		2026-02-16_PR_SizzleReel_Week-09
+		2026-02-23_PR_SizzleReel_Week-10
+		2026-03-02_PR_SizzleReel_Week-11
+	260003_GP_Vizlab_Logo_TX_SAN_VZLB_IN
+		@insert PROJECT
+	260004_AI_Vizlab_Tshirt-Designs_TX_SAN_VZLB_IN
+		@insert PROJECT
