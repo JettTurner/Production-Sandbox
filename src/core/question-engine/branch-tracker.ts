@@ -1,69 +1,47 @@
-import { Question } from "../models/questions.js";
-import { KnowledgeStateManager } from "./knowledge-state.js";
-
 export interface BranchState {
-  stack: string[];
-  explored: string[];
-  unresolvedNodes: string[];
+  frontier: string[];
 }
 
 export class BranchTracker {
-  private stack: string[] = [];
-  private explored: Set<string> = new Set();
-  private unresolvedNodes: string[] = [];
+  private frontier: string[] = [];
 
-  onBranchExplored(questionId: string, followUpIds: string[]): void {
-    this.explored.add(questionId);
-    const newFollowUps = followUpIds.filter(id => !this.explored.has(id));
-    for (let i = newFollowUps.length - 1; i >= 0; i--) {
-      this.stack.push(newFollowUps[i]);
+  onQuestionAnswered(followUpIds: string[]): void {
+    for (const id of [...followUpIds].reverse()) {
+      this.frontier.unshift(id);
     }
   }
 
-  onBranchComplete(): void {
-    if (this.stack.length > 0) {
-      this.stack.pop();
+  removeFromFrontier(questionId: string): void {
+    const idx = this.frontier.indexOf(questionId);
+    if (idx !== -1) this.frontier.splice(idx, 1);
+  }
+
+  removeFollowUps(followUpIds: string[]): void {
+    for (const id of followUpIds) {
+      const idx = this.frontier.indexOf(id);
+      if (idx !== -1) this.frontier.splice(idx, 1);
     }
   }
 
-  registerBranchPoint(questionId: string, unexploredOptionIds: string[]): void {
-    const fresh = unexploredOptionIds.filter(id => !this.explored.has(id));
-    this.unresolvedNodes.push(...fresh);
+  hasFrontierItems(): boolean {
+    return this.frontier.length > 0;
   }
 
-  getNextFromStack(): string | undefined {
-    return this.stack[this.stack.length - 1];
+  getFrontier(): string[] {
+    return [...this.frontier];
   }
 
-  popFromStack(): string | undefined {
-    return this.stack.pop();
-  }
-
-  isQuestionExplored(questionId: string): boolean {
-    return this.explored.has(questionId);
-  }
-
-  isComplete(): boolean {
-    return this.stack.length === 0 && this.unresolvedNodes.length === 0;
-  }
-
-  getDepth(): number {
-    return this.stack.length;
+  isQuestionOnFrontier(questionId: string): boolean {
+    return this.frontier.includes(questionId);
   }
 
   serialize(): BranchState {
-    return {
-      stack: [...this.stack],
-      explored: Array.from(this.explored),
-      unresolvedNodes: [...this.unresolvedNodes],
-    };
+    return { frontier: [...this.frontier] };
   }
 
   static deserialize(data: BranchState): BranchTracker {
     const tracker = new BranchTracker();
-    tracker.stack = [...data.stack];
-    tracker.explored = new Set(data.explored);
-    tracker.unresolvedNodes = [...data.unresolvedNodes];
+    tracker.frontier = [...data.frontier];
     return tracker;
   }
 }

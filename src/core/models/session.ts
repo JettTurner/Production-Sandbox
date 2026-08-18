@@ -1,5 +1,6 @@
 import { SessionStatus } from "./enums.js";
 import { DomainFact, Contradiction, KnowledgeSummary } from "./knowledge.js";
+import { BranchState } from "../question-engine/branch-tracker.js";
 
 export interface SerializedSession {
   id: string;
@@ -11,11 +12,7 @@ export interface SerializedSession {
     contradictions: Contradiction[];
     summary: KnowledgeSummary;
   };
-  branchTracker: {
-    stack: string[];
-    explored: string[];
-    unresolvedNodes: string[];
-  };
+  branchTracker: BranchState;
   createdAt: number;
   updatedAt: number;
 }

@@ -33,7 +33,7 @@ export class InterviewSession {
   private status: SessionStatus;
   private createdAt: number;
   private updatedAt: number;
-  private questionHistory: { questionId: string; answer: Answer }[] = [];
+  private questionHistory: { questionId: string; answer: Answer; factIds: string[]; followUpIds: string[] }[] = [];
 
   constructor(name?: string, sessionId?: string) {
     this.id = sessionId || generateId();
@@ -61,10 +61,9 @@ export class InterviewSession {
     const question = getQuestionById(answer.questionId);
     if (!question) throw new Error(`Question not found: ${answer.questionId}`);
 
-    this.questionHistory.push({ questionId: answer.questionId, answer });
+    const factIds: string[] = [];
 
-    // Record that this question was answered
-    this.state.addFact({
+    const answeredFact = this.state.addFact({
       domain: question.domain,
       key: `_answered_${question.id}`,
       value: true,
@@ -72,26 +71,27 @@ export class InterviewSession {
       importance: question.importance,
       source: question.id,
     });
+    factIds.push(answeredFact.id);
 
-    // Process answer into domain facts
     const facts = AnswerProcessor.toFacts(question, answer);
     for (const fact of facts) {
-      // Check for contradictions before adding
       const contradictions = this.detector.detect(this.state, fact);
       for (const c of contradictions) {
         this.state.addContradiction(c);
       }
-      this.state.addFact(fact);
+      const added = this.state.addFact(fact);
+      factIds.push(added.id);
     }
 
-    // Update branch tracker
     const followUps = this.selector.getUnlockedFollowUps(question, answer.value);
-    this.branchTracker.onBranchExplored(question.id, followUps);
+    this.branchTracker.onQuestionAnswered(followUps);
 
-    // If no follow-ups, complete this branch
-    if (followUps.length === 0) {
-      this.branchTracker.onBranchComplete();
-    }
+    this.questionHistory.push({
+      questionId: answer.questionId,
+      answer,
+      factIds,
+      followUpIds: followUps,
+    });
 
     this.updatedAt = Date.now();
     return this.getResult();
@@ -117,23 +117,49 @@ export class InterviewSession {
     this.updatedAt = Date.now();
   }
 
-  getNextQuestion(): Question | null {
-    if (this.branchTracker.isComplete()) {
-      this.status = SessionStatus.Complete;
-      return null;
+  goBack(): { question: Question; answer: Answer } | null {
+    if (this.status !== SessionStatus.Active) return null;
+    if (this.questionHistory.length === 0) return null;
+
+    const last = this.questionHistory.pop()!;
+
+    for (const factId of last.factIds) {
+      this.state.removeFact(factId);
     }
-    return this.selector.selectNext(this.state, this.branchTracker);
+
+    this.branchTracker.removeFollowUps(last.followUpIds);
+
+    const question = getQuestionById(last.questionId);
+    this.updatedAt = Date.now();
+
+    return question ? { question, answer: last.answer } : null;
+  }
+
+  canGoBack(): boolean {
+    return this.status === SessionStatus.Active && this.questionHistory.length > 0;
+  }
+
+  getQuestionHistory(): { questionId: string; answer: Answer }[] {
+    return this.questionHistory.map(h => ({ questionId: h.questionId, answer: h.answer }));
+  }
+
+  getNextQuestion(): Question | null {
+    const question = this.selector.selectNext(this.state, this.branchTracker);
+    if (question && this.branchTracker.isQuestionOnFrontier(question.id)) {
+      this.branchTracker.removeFromFrontier(question.id);
+    }
+    return question;
   }
 
   getResult(): InterviewResult {
-    const nextQuestion = this.getNextQuestion();
-    if (!nextQuestion && this.status === SessionStatus.Active) {
-      this.status = SessionStatus.Complete;
-    }
+    const nextQuestion = this.selector.selectNext(this.state, this.branchTracker);
+    const effectiveStatus = (!nextQuestion && this.status === SessionStatus.Active)
+      ? SessionStatus.Complete
+      : this.status;
 
     return {
       nextQuestion,
-      status: this.status,
+      status: effectiveStatus,
       contradictions: this.state.getContradictions().map(c => ({
         description: c.description,
         resolved: c.resolved,
@@ -164,10 +190,6 @@ export class InterviewSession {
 
   getUpdatedAt(): number {
     return this.updatedAt;
-  }
-
-  getQuestionHistory(): { questionId: string; answer: Answer }[] {
-    return [...this.questionHistory];
   }
 
   serialize(): SerializedSession {

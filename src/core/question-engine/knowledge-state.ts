@@ -24,6 +24,21 @@ export class KnowledgeStateManager {
     return fullFact;
   }
 
+  removeFact(id: string): boolean {
+    return this.facts.delete(id);
+  }
+
+  removeFactsBySource(sourceId: string): DomainFact[] {
+    const removed: DomainFact[] = [];
+    for (const [id, fact] of this.facts) {
+      if (fact.source === sourceId) {
+        this.facts.delete(id);
+        removed.push(fact);
+      }
+    }
+    return removed;
+  }
+
   getFactById(id: string): DomainFact | undefined {
     return this.facts.get(id);
   }
@@ -84,7 +99,11 @@ export class KnowledgeStateManager {
     for (const domain of Object.values(KnowledgeDomain)) {
       const domainFacts = this.getFactsByDomain(domain as KnowledgeDomain);
       const required = requiredKeys[domain as KnowledgeDomain] || 1;
-      const uniqueKeys = new Set(domainFacts.map(f => f.key));
+      const uniqueKeys = new Set(
+        domainFacts
+          .filter(f => !f.key.startsWith("_answered_"))
+          .map(f => f.key)
+      );
       coverage[domain as KnowledgeDomain] = Math.min(1, uniqueKeys.size / required);
     }
 

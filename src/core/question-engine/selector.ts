@@ -1,12 +1,6 @@
-import { Question, QuestionOption } from "../models/questions.js";
+import { Question } from "../models/questions.js";
 import { KnowledgeStateManager } from "./knowledge-state.js";
 import { BranchTracker } from "./branch-tracker.js";
-
-interface ScoredQuestion {
-  question: Question;
-  score: number;
-  reason: string;
-}
 
 export class QuestionSelector {
   private questions: Question[];
@@ -22,31 +16,37 @@ export class QuestionSelector {
     const answeredIds = this.getAnsweredQuestionIds(state);
     const candidates = this.questions.filter(q => {
       if (answeredIds.has(q.id)) return false;
-      if (branchTracker.isQuestionExplored(q.id)) return false;
       if (!this.arePrerequisitesMet(q, state)) return false;
       return true;
     });
 
     if (candidates.length === 0) return null;
 
-    const scored: ScoredQuestion[] = candidates.map(q => ({
-      question: q,
-      score: this.scoreQuestion(q, state, branchTracker),
-      reason: this.getScoreReason(q, state, branchTracker),
-    }));
+    if (branchTracker.hasFrontierItems()) {
+      const frontierCandidates = candidates.filter(q =>
+        branchTracker.isQuestionOnFrontier(q.id)
+      );
+      if (frontierCandidates.length > 0) {
+        return this.pickBest(frontierCandidates, state);
+      }
+    }
 
+    return this.pickBest(candidates, state);
+  }
+
+  private pickBest(candidates: Question[], state: KnowledgeStateManager): Question {
+    const scored = candidates.map(q => ({
+      question: q,
+      score: this.scoreQuestion(q, state),
+    }));
     scored.sort((a, b) => b.score - a.score);
     return scored[0].question;
   }
 
-  private scoreQuestion(
-    q: Question,
-    state: KnowledgeStateManager,
-    branchTracker: BranchTracker
-  ): number {
+  private scoreQuestion(q: Question, state: KnowledgeStateManager): number {
     const unknownScore = this.unknownsScore(q, state);
     const importanceScore = q.importance;
-    const confidenceScore = this.confidenceScore(q, state);
+    const confidenceScore = this.confidenceScore(state);
     const contradictionScore = this.contradictionScore(q, state);
     const unlockScore = this.unlockPotentialScore(q);
 
@@ -59,28 +59,14 @@ export class QuestionSelector {
     );
   }
 
-  private getScoreReason(
-    q: Question,
-    state: KnowledgeStateManager,
-    branchTracker: BranchTracker
-  ): string {
-    const reasons: string[] = [];
-    if (q.importance > 0.8) reasons.push("high importance");
-    if (this.unknownsScore(q, state) > 0.7) reasons.push("addresses unknowns");
-    if (this.contradictionScore(q, state) > 0.5) reasons.push("may resolve contradiction");
-    if (this.unlockPotentialScore(q) > 0.5) reasons.push("unlocks follow-ups");
-    return reasons.join(", ") || "general coverage";
-  }
-
   private unknownsScore(q: Question, state: KnowledgeStateManager): number {
     if (q.tags.length === 0) return 0.5;
     const hasAny = q.tags.some(tag => state.hasFact(tag));
     return hasAny ? 0.2 : 0.8;
   }
 
-  private confidenceScore(q: Question, state: KnowledgeStateManager): number {
-    const avgConfidence = state.getAverageConfidence();
-    return 1 - avgConfidence;
+  private confidenceScore(state: KnowledgeStateManager): number {
+    return 1 - state.getAverageConfidence();
   }
 
   private contradictionScore(q: Question, state: KnowledgeStateManager): number {
