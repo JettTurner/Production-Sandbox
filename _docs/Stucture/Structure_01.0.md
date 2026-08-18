@@ -96,7 +96,7 @@ Production-Sandbox/
 # Core Data Models
 
 ## src/core/models/enums.ts
-```
+```ts
 export enum KnowledgeDomain {
   Work = "work",
   People = "people",
@@ -131,7 +131,7 @@ export enum FlowType {
 ```
 
 ## src/core/models/questions.ts
-```
+```ts
 import { KnowledgeDomain, QuestionType } from "./enums";
 
 export interface QuestionOption {
@@ -168,7 +168,7 @@ export interface Question {
 ```
 
 ## src/core/models/knowledge.ts
-```
+```ts
 import { KnowledgeDomain, RelationshipType, FlowType } from "./enums";
 
 export interface DomainFact {
@@ -207,7 +207,7 @@ export interface KnowledgeSummary {
 ```
 
 ## src/core/models/production-model.ts
-```
+```ts
 export interface ProductionModel {
   meta: {
     sessionId: string;
@@ -252,7 +252,7 @@ export interface ProductionModel {
 The heart of the system. Three key pieces:
 
 ## src/core/question-engine/knowledge-state.ts
-```
+```ts
 export class KnowledgeState {
   private facts: Map<string, DomainFact> = new Map();
   private contradictions: Contradiction[] = [];
@@ -285,7 +285,7 @@ export class KnowledgeState {
 ## src/core/question-engine/selector.ts
 This is the "greatest reduction in important uncertainty" algorithm:
 
-```
+```ts
 interface SelectionCriteria {
   unknowns: number;           // How many facts are missing in this domain
   importance: number;         // How consequential is this domain to design (0-1)
@@ -343,7 +343,7 @@ export class QuestionSelector {
 ## src/core/question-engine/branch-tracker.ts
 This implements the DFS with backtracking described in section 7 of your paper:
 
-```
+```ts
 export class BranchTracker {
   private stack: string[] = [];          // Question IDs we're currently exploring
   private explored: Set<string> = new Set();  // Questions we've already asked
@@ -382,7 +382,7 @@ export class BranchTracker {
 ```
 
 ## src/core/question-engine/contradiction-detector.ts
-```
+```ts
 export class ContradictionDetector {
   /** Rules that define what constitutes a contradiction */
   private rules: ContradictionRule[];
@@ -414,7 +414,7 @@ export class ContradictionDetector {
 # Interview Session Manager
 
 ## src/core/interview/session-manager.ts
-```
+```ts
 export type SessionStatus = "pending" | "active" | "paused" | "complete" | "abandoned";
 
 export class InterviewSession {
@@ -488,7 +488,7 @@ export class InterviewSession {
 ```
 
 ## src/core/interview/answer-processor.ts
-```
+```ts
 export class AnswerProcessor {
   /** Maps a question + raw answer to domain facts */
   static toFacts(questionId: string, answer: Answer): DomainFact[] {
@@ -549,7 +549,7 @@ export class AnswerProcessor {
 # Production Model Builder
 
 ## src/core/production/model-builder.ts
-```
+```ts
 export class ModelBuilder {
   static build(state: KnowledgeState): ProductionModel {
     const facts = Array.from(state.facts.values());
@@ -597,7 +597,7 @@ export class ModelBuilder {
 ```
 
 ## src/core/production/completeness.ts
-```
+```ts
 export class CompletenessAnalyzer {
   static analyze(state: KnowledgeState): CompletenessReport {
     const coverage = state.getCoverage();
@@ -622,7 +622,7 @@ export class CompletenessAnalyzer {
 # Output Generators
 
 ## src/core/output/markdown-report.ts
-```
+```ts
 export class MarkdownReportGenerator {
   static generate(model: ProductionModel): string {
     return [
@@ -662,7 +662,7 @@ export class MarkdownReportGenerator {
 # SQLite Schema
 
 ## src/db/schema.ts
-```
+```ts
 CREATE TABLE sessions (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -730,7 +730,7 @@ POST   /api/sessions/:id/export/markdown → Export production model as Markdown
 ## UI Flow
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│   Home Page     │────▶│   Interview      │────▶│  Production      │
+│   Home Page     │────▶│   Interview      │────▶│  Production     │
 │   Session List  │     │   (Questioning)  │     │  Model Viewer    │
 └─────────────────┘     └──────────────────┘     └──────────────────┘
                               │                         │
@@ -756,40 +756,40 @@ The system always asks the question that provides the greatest reduction in impo
 ## Summary: Implementation Layers
 
 ```
-┌─────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────┐
 │                    WEB UI (React/HTML)                       │
 │  Interview screen │ Model viewer │ Export panel              │
-└───────────────────────────┬─────────────────────────────────┘
+└───────────────────────────┬──────────────────────────────────┘
                             │ HTTP
-┌───────────────────────────┴─────────────────────────────────┐
+┌───────────────────────────┴──────────────────────────────────┐
 │                    API LAYER (Express/Hono)                  │
 │  /sessions  /questions  /answers  /export                    │
-└───────────────────────────┬─────────────────────────────────┘
+└───────────────────────────┬──────────────────────────────────┘
                             │
-┌───────────────────────────┴─────────────────────────────────┐
+┌───────────────────────────┴──────────────────────────────────┐
 │                    CORE ENGINE (Pure TS)                     │
 │                                                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │  Question     │  │  Knowledge   │  │  Production      │  │
-│  │  Selector     │  │  State       │  │  Model Builder   │  │
-│  │              │  │              │  │                  │  │
-│  │  scoring     │  │  facts       │  │  facts → model   │  │
-│  │  algorithm   │  │  confidence  │  │  implications    │  │
-│  └──────┬───────┘  └──────┬───────┘  └────────┬─────────┘  │
-│         │                 │                    │             │
-│  ┌──────┴───────┐  ┌──────┴───────┐  ┌────────┴─────────┐  │
-│  │  Branch       │  │  Contradict. │  │  Output          │  │
-│  │  Tracker      │  │  Detector    │  │  Generators      │  │
-│  │  (DFS)       │  │              │  │  JSON + MD       │  │
-│  └──────────────┘  └──────────────┘  └──────────────────┘  │
+│  ┌───────────────┐  ┌──────────────┐  ┌──────────────────┐   │
+│  │  Question     │  │  Knowledge   │  │  Production      │   │
+│  │  Selector     │  │  State       │  │  Model Builder   │   │
+│  │               │  │              │  │                  │   │
+│  │  scoring      │  │  facts       │  │  facts → model   │   │
+│  │  algorithm    │  │  confidence  │  │  implications    │   │
+│  └──────┬────────┘  └──────┬───────┘  └────────┬─────────┘   │
+│         │                  │                   │             │
+│  ┌──────┴────────┐  ┌──────┴───────┐  ┌────────┴─────────┐   │
+│  │  Branch       │  │  Contradict. │  │  Output          │   │
+│  │  Tracker      │  │  Detector    │  │  Generators      │   │
+│  │  (DFS)        │  │              │  │  JSON + MD       │   │
+│  └───────────────┘  └──────────────┘  └──────────────────┘   │
 │                                                              │
 │  Question Definitions (data/*.ts)                            │
-└───────────────────────────┬─────────────────────────────────┘
-                            │
-┌───────────────────────────┴─────────────────────────────────┐
+└────────────────────────────┬─────────────────────────────────┘
+                             │
+┌────────────────────────────┴─────────────────────────────────┐
 │                    DATA LAYER                                │
 │  SQLite: sessions │ answers │ facts │ contradictions         │
-└─────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ## Suggested Build Order
