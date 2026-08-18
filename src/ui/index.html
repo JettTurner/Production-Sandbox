@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Production Sandbox</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>Production Sandbox</h1>
+      <p class="subtitle">Discover organizational structure through adaptive inquiry</p>
+    </header>
+
+    <main>
+      <div id="session-list-page" class="page active">
+        <div class="page-header">
+          <h2>Sessions</h2>
+          <button id="new-session-btn" class="btn btn-primary">New Session</button>
+        </div>
+        <div id="sessions-container"></div>
+      </div>
+
+      <div id="interview-page" class="page">
+        <div class="interview-layout">
+          <div class="interview-main">
+            <div class="interview-header">
+              <button id="back-btn" class="btn btn-secondary">&larr; Back</button>
+              <h2 id="session-name"></h2>
+              <span id="session-status" class="badge"></span>
+            </div>
+            <div id="question-container" class="question-card"></div>
+          </div>
+          <div class="interview-sidebar">
+            <div class="coverage-panel">
+              <h3>Coverage</h3>
+              <div id="coverage-bars"></div>
+            </div>
+            <div class="contradictions-panel">
+              <h3>Contradictions</h3>
+              <div id="contradictions-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="export-page" class="page">
+        <div class="export-layout">
+          <div class="export-header">
+            <button id="export-back-btn" class="btn btn-secondary">&larr; Back</button>
+            <h2>Production Model</h2>
+          </div>
+          <div id="export-content"></div>
+          <div class="export-actions">
+            <button id="export-json-btn" class="btn btn-primary">Export JSON</button>
+            <button id="export-markdown-btn" class="btn btn-primary">Export Markdown</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
