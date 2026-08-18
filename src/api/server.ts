@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 import sessions from "./routes/sessions.js";
 import questions from "./routes/questions.js";
 import answers from "./routes/answers.js";
+import back from "./routes/back.js";
 import exportRoutes from "./routes/export.js";
 import { closeDatabase } from "../db/connection.js";
 
@@ -20,6 +21,7 @@ app.use("/*", cors());
 app.route("/api/sessions", sessions);
 app.route("/api/sessions", questions);
 app.route("/api/sessions", answers);
+app.route("/api/sessions", back);
 app.route("/api/sessions", exportRoutes);
 
 const staticDir = path.join(__dirname, "../../src/ui");

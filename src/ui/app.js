@@ -59,6 +59,7 @@ async function createSession() {
 async function openSession(sessionId) {
   currentSessionId = sessionId;
   showPage("interview-page");
+  updateQuestionNav(false);
 
   const res = await fetch(`${API}/sessions/${sessionId}`);
   const session = await res.json();
@@ -80,6 +81,7 @@ async function loadNextQuestion() {
 
   currentQuestion = data.question;
   renderQuestion(data.question);
+  updateQuestionNav(true);
 }
 
 function renderQuestion(q) {
@@ -154,9 +156,11 @@ async function submitAnswer(answer) {
 
   if (data.status === "complete") {
     showCompleteMessage();
+    updateQuestionNav(false);
   } else if (data.nextQuestion) {
     currentQuestion = data.nextQuestion;
     renderQuestion(data.nextQuestion);
+    updateQuestionNav(true);
   }
 
   updateContradictions(data.contradictions);
@@ -193,6 +197,35 @@ function submitOpen() {
   const text = document.getElementById("open-text").value.trim();
   if (!text) return;
   submitAnswer({ questionId, value: text, text });
+}
+
+function updateQuestionNav(canGoBack) {
+  const nav = document.getElementById("question-nav");
+  if (nav) {
+    nav.style.display = canGoBack ? "block" : "none";
+  }
+}
+
+async function goBack() {
+  if (!currentSessionId) return;
+
+  const res = await fetch(`${API}/sessions/${currentSessionId}/back`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    alert(err.error || "Cannot go back");
+    return;
+  }
+
+  const data = await res.json();
+  currentQuestion = data.question;
+  renderQuestion(data.question);
+  updateQuestionNav(data.canGoBack);
+  updateContradictions([]);
+  await loadCoverage();
 }
 
 // ==========================================
@@ -241,6 +274,7 @@ function updateStatusBadge(status) {
 }
 
 function showCompleteMessage() {
+  updateQuestionNav(false);
   document.getElementById("question-container").innerHTML = `
     <div class="complete-message">
       <h2>Interview Complete</h2>
