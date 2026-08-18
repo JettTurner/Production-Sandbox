@@ -730,7 +730,7 @@ POST   /api/sessions/:id/export/markdown → Export production model as Markdown
 ## UI Flow
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│   Home Page     │────▶│   Interview      │────▶│  Production     │
+│   Home Page     │────>│   Interview      │────>│  Production      │
 │   Session List  │     │   (Questioning)  │     │  Model Viewer    │
 └─────────────────┘     └──────────────────┘     └──────────────────┘
                               │                         │
