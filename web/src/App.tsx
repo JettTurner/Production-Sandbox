@@ -141,8 +141,22 @@ export default function App() {
   };
 
   const saveFh = () => {
-    downloadText(serializeFh(doc), fileName ?? "structure.fh");
+    downloadText(serializeFh(doc), fileName ?? `${doc.name}.fh`);
     notify("Saved .fh file.");
+  };
+
+  // Edits the @name directive; keeps the header filename in sync.
+  const setDocName = (value: string) => {
+    const trimmed = value.trim();
+    commitDoc({ ...doc, name: trimmed || "Untitled Structure" });
+    if (trimmed) setFileName(`${trimmed}.fh`);
+  };
+
+  // Edits the header filename; also writes the @name line.
+  const renameFile = (value: string) => {
+    const base = value.trim().replace(/\.fh$/i, "").trim();
+    setFileName(base ? `${base}.fh` : null);
+    if (base) commitDoc({ ...doc, name: base });
   };
 
   const copyStructure = async () => {
@@ -274,9 +288,14 @@ export default function App() {
           Folder Heirarchy Studio
           <small>.fh</small>
         </div>
-        <span className="filename" title={fileName ?? "unsaved"}>
-          {fileName ?? "untitled.fh"}
-        </span>
+        <input
+          className="filename-input"
+          value={fileName ?? `${doc.name}.fh`}
+          onChange={(e) => renameFile(e.target.value)}
+          title="Rename the .fh file (also updates the @name line)"
+          spellCheck={false}
+          placeholder="name.fh"
+        />
         <div className="spacer" />
         <div className="toolbar">
           <select className="btn" style={{ padding: "6px 8px" }} value={sample} onChange={(e) => loadSample(e.target.value)}>
@@ -350,17 +369,27 @@ export default function App() {
             <div className="design-area">
               <div className="sub-head">
                 <span className="title">Design</span>
-                <select
-                  value={activeSection ?? "__root__"}
-                  onChange={(e) => setActiveSection(e.target.value === "__root__" ? null : e.target.value)}
-                >
-                  <option value="__root__">Root structure</option>
-                  {doc.templateOrder.map((name) => (
-                    <option key={name} value={name}>
-                      Template: {name}
-                    </option>
-                  ))}
-                </select>
+                <input
+                  className="name-input"
+                  value={doc.name}
+                  onChange={(e) => setDocName(e.target.value)}
+                  placeholder="Structure name"
+                  title="Name of this folder structure (writes the @name line)"
+                  spellCheck={false}
+                />
+                <div className="right">
+                  <select
+                    value={activeSection ?? "__root__"}
+                    onChange={(e) => setActiveSection(e.target.value === "__root__" ? null : e.target.value)}
+                  >
+                    <option value="__root__">Root structure</option>
+                    {doc.templateOrder.map((name) => (
+                      <option key={name} value={name}>
+                        Template: {name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="pane-body">
                 <Designer
