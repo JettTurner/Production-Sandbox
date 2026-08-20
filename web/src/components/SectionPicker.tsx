@@ -37,14 +37,6 @@ export default function SectionPicker({
 
   return (
     <div className="design-tools">
-      <button
-        className={`btn ${active === null ? "active" : ""}`}
-        onClick={() => onSelect(null)}
-        title="Edit the root structure"
-      >
-        Root
-      </button>
-
       {renaming ? (
         <input
           className="name-input small"

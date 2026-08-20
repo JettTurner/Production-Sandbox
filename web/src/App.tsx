@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodePane from "./components/CodePane";
-import Designer, { type SectionRef } from "./components/Designer";
+import Designer from "./components/Designer";
 import Preview from "./components/Preview";
 import SectionPicker from "./components/SectionPicker";
 import {
+  CodeIcon,
   CopyIcon,
   DownloadIcon,
   EraserIcon,
@@ -67,7 +68,9 @@ export default function App() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [sample, setSample] = useState("");
+  const [sourceOpen, setSourceOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const baselineRef = useRef(DEFAULT_SOURCE);
 
   const MAX_HISTORY = 30;
   const pastRef = useRef<string[]>([]);
@@ -84,13 +87,6 @@ export default function App() {
   const parsed = useMemo(() => parseFh(source), [source]);
   const doc = useMemo(() => emptyDoc(source), [source]);
   const resolved = useMemo(() => resolveDoc(doc), [doc]);
-
-  const section: SectionRef =
-    activeSection && doc.templates[activeSection]
-      ? { kind: "template", name: activeSection }
-      : { kind: "root" };
-
-  const sectionNodes: FsNode[] = section.kind === "root" ? doc.root : doc.templates[section.name!] ?? [];
 
   // Every source change goes through here so it can be undone. Rapid typing
   // (within 800ms) is coalesced into one undo step; discrete actions always push.
@@ -133,28 +129,40 @@ export default function App() {
     [applySource],
   );
 
-  const handleSectionNodesChange = useCallback(
+  const dirty = source !== baselineRef.current;
+
+  const handleRootChange = useCallback(
     (nodes: FsNode[]) => {
-      const next: FhDocument = { ...doc, templates: { ...doc.templates } };
-      if (section.kind === "root") next.root = nodes;
-      else if (section.name) next.templates[section.name] = nodes;
-      commitDoc(next);
+      commitDoc({ ...doc, root: nodes });
     },
-    [doc, section, commitDoc],
+    [doc, commitDoc],
   );
+
+  const handleTemplateChange = useCallback(
+    (nodes: FsNode[]) => {
+      if (!activeSection) return;
+      commitDoc({ ...doc, templates: { ...doc.templates, [activeSection]: nodes } });
+    },
+    [doc, activeSection, commitDoc],
+  );
+
+  const confirmDiscard = () => !dirty || window.confirm("You have unsaved changes — discard them and continue?");
 
   // ---------------- File I/O ----------------
   const handleOpenFile = useCallback(
     (file: File) => {
+      if (!confirmDiscard()) return;
       const reader = new FileReader();
       reader.onload = () => {
-        applySource(String(reader.result ?? ""), true);
+        const text = String(reader.result ?? "");
+        baselineRef.current = text;
+        applySource(text, true);
         setFileName(file.name);
         setActiveSection(null);
       };
       reader.readAsText(file);
     },
-    [],
+    [dirty],
   );
 
   const openFromInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -165,10 +173,15 @@ export default function App() {
 
   const loadSample = async (value: string) => {
     if (!value) return;
+    if (!confirmDiscard()) {
+      setSample("");
+      return;
+    }
     try {
       const res = await fetch(`/samples/${value}.fh`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const text = await res.text();
+      baselineRef.current = text;
       applySource(text, true);
       setFileName(`${value}.fh`);
       setActiveSection(null);
@@ -182,8 +195,9 @@ export default function App() {
 
   const saveFh = useCallback(() => {
     downloadText(serializeFh(doc), fileName ?? `${doc.name}.fh`);
+    baselineRef.current = source;
     notify("Saved .fh file.");
-  }, [doc, fileName, notify]);
+  }, [doc, fileName, source, notify]);
 
   // Edits the @name directive; keeps the header filename in sync.
   const setDocName = (value: string) => {
@@ -233,6 +247,8 @@ export default function App() {
   };
 
   const newDoc = () => {
+    if (!confirmDiscard()) return;
+    baselineRef.current = DEFAULT_SOURCE;
     applySource(DEFAULT_SOURCE, true);
     setFileName(null);
     setActiveSection(null);
@@ -326,6 +342,17 @@ export default function App() {
     };
   }, [handleOpenFile, saveFh, undo, redo]);
 
+  // Warn before leaving the page with unsaved work.
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
+
   const stats = countNodes(resolved.tree);
   const errors = parsed.issues.filter((i) => i.severity === "error");
   const warnings = parsed.issues.filter((i) => i.severity === "warning");
@@ -350,6 +377,13 @@ export default function App() {
         />
         <div className="spacer" />
         <div className="toolbar">
+          <button
+            className={`btn ${sourceOpen ? "active" : ""}`}
+            onClick={() => setSourceOpen((v) => !v)}
+            title="Toggle the raw .fh source editor"
+          >
+            <CodeIcon /> Source
+          </button>
           <select className="btn" style={{ padding: "6px 8px" }} value={sample} onChange={(e) => loadSample(e.target.value)}>
             <option value="">Load sample…</option>
             {SAMPLES.map((s) => (
@@ -382,43 +416,45 @@ export default function App() {
       </header>
 
       <main className="main">
-        {/* ---------- Code ---------- */}
-        <section className="pane">
-          <div className="pane-head">
-            <span className="title">Source (.fh)</span>
-            <div className="right">
-              <span className="preview-stats">
-                <span>{source.split("\n").length} lines</span>
-              </span>
+        {/* ---------- Source sidebar (collapsible) ---------- */}
+        {sourceOpen && (
+          <section className="pane source-sidebar">
+            <div className="pane-head">
+              <span className="title">Source (.fh)</span>
+              <div className="right">
+                <span className="preview-stats">
+                  <span>{source.split("\n").length} lines</span>
+                </span>
+              </div>
             </div>
-          </div>
-          <div className="pane-body">
-            <CodePane source={source} onChange={applySource} />
-          </div>
-          {parsed.issues.length > 0 && (
-            <div className={`issue-banner ${errors.length ? "error" : "warning"}`}>
-              <ul>
-                {parsed.issues.slice(0, 8).map((issue, i) => (
-                  <li key={i}>
-                    {issue.line ? `Line ${issue.line}: ` : ""}
-                    {issue.message}
-                  </li>
-                ))}
-              </ul>
+            <div className="pane-body">
+              <CodePane source={source} onChange={applySource} />
             </div>
-          )}
-        </section>
+            {parsed.issues.length > 0 && (
+              <div className={`issue-banner ${errors.length ? "error" : "warning"}`}>
+                <ul>
+                  {parsed.issues.slice(0, 8).map((issue, i) => (
+                    <li key={i}>
+                      {issue.line ? `Line ${issue.line}: ` : ""}
+                      {issue.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+        )}
 
-        {/* ---------- Designer ---------- */}
+        {/* ---------- Root Designer ---------- */}
         <section className="pane">
           <div className="pane-head">
-            <span className="title">Designer</span>
+            <span className="title">Root Designer</span>
             <div className="right">
               <span style={{ fontSize: 11.5, color: "var(--muted)" }}>double-click to rename · drag to move · ＋ to add</span>
             </div>
           </div>
           <div className="sub-head">
-            <span className="title">Design</span>
+            <span className="title">Name</span>
             <input
               className="name-input"
               value={doc.name}
@@ -427,6 +463,24 @@ export default function App() {
               title="Name of this folder structure (writes the @name line)"
               spellCheck={false}
             />
+          </div>
+          <div className="pane-body">
+            <Designer
+              nodes={doc.root}
+              section={{ kind: "root" }}
+              templates={doc.templateOrder}
+              onNodesChange={handleRootChange}
+            />
+          </div>
+        </section>
+
+        {/* ---------- Template Editor ---------- */}
+        <section className="pane">
+          <div className="pane-head">
+            <span className="title">Templates</span>
+            <div className="right">
+              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>reusable structures</span>
+            </div>
           </div>
           <SectionPicker
             templates={doc.templateOrder}
@@ -437,12 +491,19 @@ export default function App() {
             onDelete={deleteTemplate}
           />
           <div className="pane-body">
-            <Designer
-              nodes={sectionNodes}
-              section={section}
-              templates={doc.templateOrder}
-              onNodesChange={handleSectionNodesChange}
-            />
+            {activeSection && doc.templates[activeSection] ? (
+              <Designer
+                nodes={doc.templates[activeSection]}
+                section={{ kind: "template", name: activeSection }}
+                templates={doc.templateOrder}
+                onNodesChange={handleTemplateChange}
+              />
+            ) : (
+              <div className="empty-hint">
+                <div className="big">🗂️</div>
+                Select a template above to design it, or add a new one with + Template.
+              </div>
+            )}
           </div>
         </section>
 

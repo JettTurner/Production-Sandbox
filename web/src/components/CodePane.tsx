@@ -60,16 +60,9 @@ export default function CodePane({ source, onChange }: CodePaneProps) {
   }, []);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key !== "Tab") return;
-    e.preventDefault();
     const ta = textareaRef.current;
     if (!ta) return;
     const { selectionStart: start, selectionEnd: end, value } = ta;
-    const multiline = start !== end && value.slice(start, end).includes("\n");
-    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
-    const blockEndIdx = value.indexOf("\n", end);
-    const blockEnd = blockEndIdx === -1 ? value.length : blockEndIdx;
-    const block = value.slice(lineStart, blockEnd);
     const apply = (next: string, caretStart: number, caretEnd: number) => {
       onChange(next);
       requestAnimationFrame(() => {
@@ -77,6 +70,25 @@ export default function CodePane({ source, onChange }: CodePaneProps) {
         ta.selectionEnd = caretEnd;
       });
     };
+
+    // Enter: keep the current line's indentation on the new line.
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+      const indent = value.slice(lineStart, start).match(/^[\t ]*/)?.[0] ?? "";
+      const next = value.slice(0, start) + "\n" + indent + value.slice(end);
+      const caret = start + 1 + indent.length;
+      apply(next, caret, caret);
+      return;
+    }
+
+    if (e.key !== "Tab") return;
+    e.preventDefault();
+    const multiline = start !== end && value.slice(start, end).includes("\n");
+    const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+    const blockEndIdx = value.indexOf("\n", end);
+    const blockEnd = blockEndIdx === -1 ? value.length : blockEndIdx;
+    const block = value.slice(lineStart, blockEnd);
 
     if (e.shiftKey) {
       const outdented = block.replace(/^\t/, "");

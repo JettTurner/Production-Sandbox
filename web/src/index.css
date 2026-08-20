@@ -138,6 +138,11 @@ button {
 .btn:active {
   transform: translateY(1px);
 }
+.btn.active {
+  background: var(--accent-weak);
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .btn.primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -242,8 +247,7 @@ button {
 /* ---------- Main panes ---------- */
 .main {
   flex: 1 1 auto;
-  display: grid;
-  grid-template-columns: 1.05fr 1.05fr 1fr;
+  display: flex;
   gap: 12px;
   padding: 12px;
   min-height: 0;
@@ -252,11 +256,17 @@ button {
 .pane {
   display: flex;
   flex-direction: column;
+  flex: 1 1 0;
   min-height: 0;
+  min-width: 0;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
+}
+
+.source-sidebar {
+  flex: 0 0 360px;
 }
 
 .pane-head {
