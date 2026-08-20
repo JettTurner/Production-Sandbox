@@ -358,26 +358,42 @@ button {
   pointer-events: none;
 }
 
-/* ---------- Designer split ---------- */
-.designer-split {
+/* ---------- Designer tools ---------- */
+.design-tools {
   display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-.design-area {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-.insert-area {
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
   flex: 0 0 auto;
-  max-height: 40%;
-  min-height: 140px;
-  display: flex;
-  flex-direction: column;
-  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.design-tools .section-select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+  max-width: 220px;
+}
+.design-tools .section-select:focus {
+  border-color: var(--accent);
+}
+.design-tools .btn.active {
+  background: var(--accent-weak);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.design-tools .name-input.small {
+  flex: 0 0 auto;
+  min-width: 130px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 8px;
 }
 .sub-head {
   display: flex;

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodePane from "./components/CodePane";
 import Designer, { type SectionRef } from "./components/Designer";
 import Preview from "./components/Preview";
-import TemplatesPanel from "./components/TemplatesPanel";
+import SectionPicker from "./components/SectionPicker";
 import {
   CopyIcon,
   DownloadIcon,
@@ -365,61 +365,32 @@ export default function App() {
               <span style={{ fontSize: 11.5, color: "var(--muted)" }}>double-click to rename · drag to move · ＋ to add</span>
             </div>
           </div>
-          <div className="designer-split">
-            <div className="design-area">
-              <div className="sub-head">
-                <span className="title">Design</span>
-                <input
-                  className="name-input"
-                  value={doc.name}
-                  onChange={(e) => setDocName(e.target.value)}
-                  placeholder="Structure name"
-                  title="Name of this folder structure (writes the @name line)"
-                  spellCheck={false}
-                />
-                <div className="right">
-                  <select
-                    value={activeSection ?? "__root__"}
-                    onChange={(e) => setActiveSection(e.target.value === "__root__" ? null : e.target.value)}
-                  >
-                    <option value="__root__">Root structure</option>
-                    {doc.templateOrder.map((name) => (
-                      <option key={name} value={name}>
-                        Template: {name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="pane-body">
-                <Designer
-                  nodes={sectionNodes}
-                  section={section}
-                  templates={doc.templateOrder}
-                  onNodesChange={handleSectionNodesChange}
-                />
-              </div>
-            </div>
-            <div className="insert-area">
-              <div className="sub-head">
-                <span className="title">Insert Structures</span>
-                <div className="right">
-                  <span style={{ fontSize: 11, color: "var(--muted)" }}>
-                    click a structure to design it · @insert it into the tree with ＋
-                  </span>
-                </div>
-              </div>
-              <div className="pane-body">
-                <TemplatesPanel
-                  doc={doc}
-                  activeTemplate={activeSection}
-                  onSelect={(name) => setActiveSection(name)}
-                  onAdd={addTemplate}
-                  onRename={renameTemplate}
-                  onDelete={deleteTemplate}
-                />
-              </div>
-            </div>
+          <div className="sub-head">
+            <span className="title">Design</span>
+            <input
+              className="name-input"
+              value={doc.name}
+              onChange={(e) => setDocName(e.target.value)}
+              placeholder="Structure name"
+              title="Name of this folder structure (writes the @name line)"
+              spellCheck={false}
+            />
+          </div>
+          <SectionPicker
+            templates={doc.templateOrder}
+            active={activeSection}
+            onSelect={setActiveSection}
+            onAdd={addTemplate}
+            onRename={renameTemplate}
+            onDelete={deleteTemplate}
+          />
+          <div className="pane-body">
+            <Designer
+              nodes={sectionNodes}
+              section={section}
+              templates={doc.templateOrder}
+              onNodesChange={handleSectionNodesChange}
+            />
           </div>
         </section>
 

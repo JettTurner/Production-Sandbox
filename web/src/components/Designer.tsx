@@ -338,7 +338,7 @@ function PlusDropdown({
           </button>
         ))
       ) : (
-        <div className="dd-empty">No structures yet — create one in the Insert Structures panel.</div>
+        <div className="dd-empty">No structures yet — create one with the + Template button above.</div>
       )}
     </div>,
     document.body,
@@ -383,6 +383,7 @@ function NodeName({
       <input
         className="name editing"
         autoFocus
+        onFocus={(e) => e.target.select()}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onBlur={() => onCommit(value)}
