@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { FsNode } from "../lib/types";
 import { makeFolder, makeInsert, removeNode, insertChild } from "../lib/treeEdit";
 import { ChevronIcon, CopyIcon, FileIcon, FolderIcon, GripIcon, PlusIcon, XIcon } from "./icons";
@@ -25,6 +26,11 @@ interface EditState {
   value: string;
 }
 
+interface MenuState {
+  targetId: string | null;
+  anchor: HTMLElement;
+}
+
 type AddSpec =
   | { kind: "folder" }
   | { kind: "file" }
@@ -35,14 +41,7 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropState, setDropState] = useState<DropState | null>(null);
   const [editing, setEditing] = useState<EditState | null>(null);
-  const [menuFor, setMenuFor] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!menuFor) return;
-    const close = () => setMenuFor(null);
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [menuFor]);
+  const [menu, setMenu] = useState<MenuState | null>(null);
 
   const toggle = (id: string) =>
     setCollapsed((prev) => {
@@ -60,6 +59,13 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
     setDropState(null);
   };
 
+  const openMenu = (targetId: string | null, e: React.MouseEvent<HTMLElement>) => {
+    e.stopPropagation();
+    const anchor = e.currentTarget;
+    if (menu?.anchor === anchor) setMenu(null);
+    else setMenu({ targetId, anchor });
+  };
+
   const addNode = (parentId: string | null, spec: AddSpec) => {
     const node =
       spec.kind === "insert"
@@ -69,7 +75,7 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
     const siblings = parent ? parent.children : nodes;
     const newTree = insertChild(nodes, parentId, siblings.length, node);
     onNodesChange(newTree);
-    setMenuFor(null);
+    setMenu(null);
     const path = pathOf(newTree, node.id);
     setEditing(path ? { path, value: node.name } : null);
     if (parentId) setCollapsed((prev) => { const n = new Set(prev); n.delete(parentId); return n; });
@@ -98,9 +104,8 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
   const moveAt = (path: number[], dir: -1 | 1) => {
     const loc = locatedAt(nodes, path);
     if (!loc) return;
-    const siblings = loc.container;
     const target = loc.index + dir;
-    if (target < 0 || target >= siblings.length) return;
+    if (target < 0 || target >= loc.container.length) return;
     const next = removeNode(nodes, loc.node.id);
     onNodesChange(insertChild(next, path.length ? parentIdAt(nodes, path) : null, target, loc.node));
   };
@@ -201,7 +206,7 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
           )}
 
           <span className="hover-actions">
-            <IconButton title="Add…" onClick={() => setMenuFor(menuFor === node.id ? null : node.id)}>
+            <IconButton title="Add folder, file, or structure" onClick={(e) => openMenu(node.id, e)}>
               <PlusIcon />
             </IconButton>
             <IconButton title="Move up" onClick={() => moveAt(path, -1)}>
@@ -219,16 +224,6 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
           </span>
         </div>
 
-        {menuFor === node.id && (
-          <div style={{ padding: "4px 0 4px 12px" }}>
-            <PlusMenu
-              templates={templates}
-              onAdd={(spec) => addNode(node.id, spec)}
-              isRoot={false}
-            />
-          </div>
-        )}
-
         {insertable && !isCollapsed && children.length > 0 && children.map((c, i) => renderNode(c, depth + 1, [...path, i]))}
       </div>
     );
@@ -243,67 +238,110 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
             ? "Design the root structure — add folders, files, or reusable structures."
             : `Template "@${section.name}" is empty — add folders or insert another template.`}
           <div style={{ marginTop: 12, display: "flex", justifyContent: "center", gap: 6 }}>
-            <PlusMenu templates={templates} onAdd={(s) => addNode(null, s)} isRoot />
+            <AddButton label="Add…" onClick={(e) => openMenu(null, e)} />
           </div>
         </div>
       ) : (
         <>
           {nodes.map((n, i) => renderNode(n, 0, [i]))}
           <div className="designer-footer">
-            <PlusMenu templates={templates} onAdd={(s) => addNode(null, s)} isRoot />
+            <AddButton label="Add…" onClick={(e) => openMenu(null, e)} />
           </div>
         </>
+      )}
+
+      {menu && (
+        <PlusDropdown
+          anchor={menu.anchor}
+          targetLabel={menu.targetId ? "child" : "top-level item"}
+          templates={templates}
+          onAdd={(spec) => addNode(menu.targetId, spec)}
+          onClose={() => setMenu(null)}
+        />
       )}
     </div>
   );
 }
 
-function PlusMenu({
+function AddButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button className="btn" onClick={onClick} onMouseDown={(e) => e.stopPropagation()} title="Add folder, file, or structure">
+      <PlusIcon /> {label}
+    </button>
+  );
+}
+
+function PlusDropdown({
+  anchor,
+  targetLabel,
   templates,
   onAdd,
-  isRoot,
+  onClose,
 }: {
+  anchor: HTMLElement;
+  targetLabel: string;
   templates: string[];
   onAdd: (spec: AddSpec) => void;
-  isRoot: boolean;
+  onClose: () => void;
 }) {
-  const [template, setTemplate] = useState(templates[0] ?? "");
-  useEffect(() => {
-    setTemplate((t) => (templates.includes(t) ? t : templates[0] ?? ""));
-  }, [templates]);
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
-  return (
-    <div className="plus-menu" onMouseDown={(e) => e.stopPropagation()}>
-      <button className="btn" onClick={() => onAdd({ kind: "folder" })}>
-        <FolderIcon /> Folder
+  useEffect(() => {
+    const r = anchor.getBoundingClientRect();
+    const estH = Math.min(260, 120 + templates.length * 26);
+    const top = r.bottom + 6 + estH > window.innerHeight ? Math.max(6, r.top - estH - 6) : r.bottom + 6;
+    const left = Math.max(6, Math.min(r.left, window.innerWidth - 240));
+    setPos({ top, left });
+  }, [anchor, templates.length]);
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      ref={ref}
+      className="plus-dropdown"
+      style={{ position: "fixed", top: pos?.top ?? 0, left: pos?.left ?? 0, zIndex: 300 }}
+    >
+      <div className="dd-title">Add {targetLabel}</div>
+      <button className="dd-item" onClick={() => onAdd({ kind: "folder" })}>
+        <span className="ic"><FolderIcon /></span> Folder
       </button>
-      <button className="btn" onClick={() => onAdd({ kind: "file" })}>
-        <FileIcon /> File
+      <button className="dd-item" onClick={() => onAdd({ kind: "file" })}>
+        <span className="ic"><FileIcon /></span> File
       </button>
-      <span className="plus-insert">
-        <CopyIcon />
-        <span style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--purple)" }}>@insert</span>
-        {templates.length ? (
-          <>
-            <select value={template} onChange={(e) => setTemplate(e.target.value)}>
-              {templates.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-            <button className="btn primary" onClick={() => onAdd({ kind: "insert", template })} title="Insert structure">
-              Insert
-            </button>
-          </>
-        ) : (
-          <span className="muted-note">no structures yet — add one in Insert Structures</span>
-        )}
-      </span>
-      {isRoot && (
-        <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Add to {isRoot ? "top level" : "this folder"}</span>
+      <div className="dd-sep" />
+      <div className="dd-title">Insert structure</div>
+      {templates.length ? (
+        templates.map((t) => (
+          <button key={t} className="dd-item mono" onClick={() => onAdd({ kind: "insert", template: t })}>
+            <span className="ic"><CopyIcon /></span> {t}
+          </button>
+        ))
+      ) : (
+        <div className="dd-empty">No structures yet — create one in the Insert Structures panel.</div>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -314,7 +352,7 @@ function IconButton({
   className,
 }: {
   title: string;
-  onClick: () => void;
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   children: React.ReactNode;
   className?: string;
 }) {

@@ -42,14 +42,14 @@ export default function Preview({ tree, errors }: PreviewProps) {
 
     return (
       <div key={node.id} style={{ paddingLeft: depth * 20 }}>
-        <div className="preview-node">
-          {hasChildren ? (
-            <button className={`chev ${isCollapsed ? "rot" : ""}`} onClick={() => toggle(node.id)} title={isCollapsed ? "Expand" : "Collapse"}>
-              <ChevronIcon />
-            </button>
-          ) : (
-            <span className="chev" />
-          )}
+        <div
+          className={`preview-node ${hasChildren ? "clickable" : ""}`}
+          onClick={() => hasChildren && toggle(node.id)}
+          title={hasChildren ? (isCollapsed ? "Click to expand" : "Click to collapse") : node.name}
+        >
+          <span className={`chev ${isCollapsed ? "rot" : ""}`}>
+            {hasChildren && <ChevronIcon />}
+          </span>
           <span className="node-icon" style={{ color: isFile ? "#7ee787" : "#2f81f7" }}>
             {isFile ? <FileIcon /> : hasChildren ? <FolderIcon /> : <FolderArrowIcon />}
           </span>
