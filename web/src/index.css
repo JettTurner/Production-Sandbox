@@ -639,6 +639,34 @@ button {
 .tree-row .node-icon.insert {
   color: var(--purple);
 }
+
+/* ---------- Templates pane: purple theme ---------- */
+.template-pane {
+  border-color: rgba(188, 140, 255, 0.25);
+}
+.template-pane .pane-head {
+  background: rgba(188, 140, 255, 0.07);
+  border-bottom-color: rgba(188, 140, 255, 0.22);
+}
+.template-pane .pane-head .title {
+  color: var(--purple);
+}
+.template-pane .tree-row .node-icon.folder {
+  color: var(--purple);
+}
+.template-pane .tree-row .chev {
+  color: #a98ed4;
+}
+.template-pane .tree-row .chev:hover {
+  color: var(--purple);
+  background: rgba(188, 140, 255, 0.1);
+}
+.template-pane .tree-row .count {
+  color: #a98ed4;
+}
+.template-pane .tree-row .name.editing {
+  border-color: var(--purple);
+}
 .tree-row .name {
   flex: 1;
   min-width: 0;

@@ -445,37 +445,8 @@ export default function App() {
           </section>
         )}
 
-        {/* ---------- Root Designer ---------- */}
-        <section className="pane">
-          <div className="pane-head">
-            <span className="title">Root Designer</span>
-            <div className="right">
-              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>double-click to rename · drag to move · ＋ to add</span>
-            </div>
-          </div>
-          <div className="sub-head">
-            <span className="title">Name</span>
-            <input
-              className="name-input"
-              value={doc.name}
-              onChange={(e) => setDocName(e.target.value)}
-              placeholder="Structure name"
-              title="Name of this folder structure (writes the @name line)"
-              spellCheck={false}
-            />
-          </div>
-          <div className="pane-body">
-            <Designer
-              nodes={doc.root}
-              section={{ kind: "root" }}
-              templates={doc.templateOrder}
-              onNodesChange={handleRootChange}
-            />
-          </div>
-        </section>
-
         {/* ---------- Template Editor ---------- */}
-        <section className="pane">
+        <section className="pane template-pane">
           <div className="pane-head">
             <span className="title">Templates</span>
             <div className="right">
@@ -504,6 +475,35 @@ export default function App() {
                 Select a template above to design it, or add a new one with + Template.
               </div>
             )}
+          </div>
+        </section>
+
+        {/* ---------- Root Designer ---------- */}
+        <section className="pane">
+          <div className="pane-head">
+            <span className="title">Root Designer</span>
+            <div className="right">
+              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>double-click to rename · drag to move · ＋ to add</span>
+            </div>
+          </div>
+          <div className="sub-head">
+            <span className="title">Name</span>
+            <input
+              className="name-input"
+              value={doc.name}
+              onChange={(e) => setDocName(e.target.value)}
+              placeholder="Structure name"
+              title="Name of this folder structure (writes the @name line)"
+              spellCheck={false}
+            />
+          </div>
+          <div className="pane-body">
+            <Designer
+              nodes={doc.root}
+              section={{ kind: "root" }}
+              templates={doc.templateOrder}
+              onNodesChange={handleRootChange}
+            />
           </div>
         </section>
 
