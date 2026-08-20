@@ -248,9 +248,30 @@ button {
 .main {
   flex: 1 1 auto;
   display: flex;
-  gap: 12px;
   padding: 12px;
   min-height: 0;
+  overflow: hidden;
+}
+
+.col-resizer {
+  flex: 0 0 12px;
+  cursor: col-resize;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+}
+.col-resizer::after {
+  content: "";
+  width: 3px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+.col-resizer:hover::after,
+.col-resizer.active::after {
+  background: var(--accent);
 }
 
 .pane {
@@ -263,10 +284,6 @@ button {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-}
-
-.source-sidebar {
-  flex: 0 0 360px;
 }
 
 .pane-head {
@@ -668,7 +685,7 @@ button {
   border-color: var(--purple);
 }
 .tree-row .name {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -707,7 +724,7 @@ button {
 .tree-row .hover-actions {
   display: inline-flex;
   gap: 2px;
-  margin-left: 6px;
+  margin-left: auto;
   visibility: hidden;
   opacity: 0;
   transition: opacity 0.12s ease;

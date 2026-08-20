@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { FsNode } from "../../lib/types";
 import Designer from "../Designer";
 import SectionPicker from "../SectionPicker";
@@ -11,6 +12,7 @@ interface TemplatesPaneProps {
   onRename: (oldName: string, newName: string) => void;
   onDelete: (name: string) => void;
   onNodesChange: (nodes: FsNode[]) => void;
+  style?: CSSProperties;
 }
 
 export default function TemplatesPane({
@@ -22,9 +24,10 @@ export default function TemplatesPane({
   onRename,
   onDelete,
   onNodesChange,
+  style,
 }: TemplatesPaneProps) {
   return (
-    <section className="pane template-pane">
+    <section className="pane template-pane" style={style}>
       <div className="pane-head">
         <span className="title">Templates</span>
         <div className="right">

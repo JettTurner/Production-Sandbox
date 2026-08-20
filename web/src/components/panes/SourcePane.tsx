@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { ParseIssue } from "../../lib/types";
 import CodePane from "../CodePane";
 
@@ -6,11 +7,12 @@ interface SourcePaneProps {
   onChange: (value: string) => void;
   issues: ParseIssue[];
   hasErrors: boolean;
+  style?: CSSProperties;
 }
 
-export default function SourcePane({ source, onChange, issues, hasErrors }: SourcePaneProps) {
+export default function SourcePane({ source, onChange, issues, hasErrors, style }: SourcePaneProps) {
   return (
-    <section className="pane source-sidebar">
+    <section className="pane source-sidebar" style={style}>
       <div className="pane-head">
         <span className="title">Source (.fh)</span>
         <div className="right">

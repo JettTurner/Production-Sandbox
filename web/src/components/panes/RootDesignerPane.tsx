@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { FsNode } from "../../lib/types";
 import Designer from "../Designer";
 
@@ -7,6 +8,7 @@ interface RootDesignerPaneProps {
   tree: FsNode[];
   templates: string[];
   onNodesChange: (nodes: FsNode[]) => void;
+  style?: CSSProperties;
 }
 
 export default function RootDesignerPane({
@@ -15,9 +17,10 @@ export default function RootDesignerPane({
   tree,
   templates,
   onNodesChange,
+  style,
 }: RootDesignerPaneProps) {
   return (
-    <section className="pane">
+    <section className="pane" style={style}>
       <div className="pane-head">
         <span className="title">Root Designer</span>
         <div className="right">

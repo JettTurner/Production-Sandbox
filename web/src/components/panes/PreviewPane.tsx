@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { FsNode } from "../../lib/types";
 import Preview from "../Preview";
 
@@ -11,11 +12,12 @@ interface PreviewPaneProps {
   stats: PreviewStats;
   tree: FsNode[];
   errors: string[];
+  style?: CSSProperties;
 }
 
-export default function PreviewPane({ stats, tree, errors }: PreviewPaneProps) {
+export default function PreviewPane({ stats, tree, errors, style }: PreviewPaneProps) {
   return (
-    <section className="pane">
+    <section className="pane" style={style}>
       <div className="pane-head">
         <span className="title">Resolved Preview</span>
         <div className="right">

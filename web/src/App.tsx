@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ColumnResizer from "./components/ColumnResizer";
 import PreviewPane from "./components/panes/PreviewPane";
 import RootDesignerPane from "./components/panes/RootDesignerPane";
 import SourcePane from "./components/panes/SourcePane";
@@ -71,6 +72,32 @@ export default function App() {
   const [sourceOpen, setSourceOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const baselineRef = useRef(DEFAULT_SOURCE);
+
+  type PaneId = "source" | "templates" | "root" | "preview";
+  const MIN_COL = 140;
+  const MAX_COL = 900;
+  const [colPx, setColPx] = useState<Record<PaneId, number>>({
+    source: 320,
+    templates: 340,
+    root: 380,
+    preview: 0, // preview is flex-fill; not stored
+  });
+
+  // Fixed-width panes are stored in px; the preview column flexes to fill the
+  // rest, so it always reaches the right edge of the screen.
+  const handleColumnResize = useCallback(
+    (left: PaneId, right: PaneId) => (dx: number) => {
+      setColPx((prev) => {
+        const nextL = Math.min(MAX_COL, Math.max(MIN_COL, (prev[left] ?? 300) + dx));
+        const next: Record<PaneId, number> = { ...prev, [left]: nextL };
+        if (right !== "preview") {
+          next[right] = Math.min(MAX_COL, Math.max(MIN_COL, (prev[right] ?? 300) - dx));
+        }
+        return next;
+      });
+    },
+    [],
+  );
 
   const MAX_HISTORY = 30;
   const pastRef = useRef<string[]>([]);
@@ -417,9 +444,19 @@ export default function App() {
 
       <main className="main">
         {sourceOpen && (
-          <SourcePane source={source} onChange={applySource} issues={parsed.issues} hasErrors={errors.length > 0} />
+          <>
+            <SourcePane
+              style={{ flex: `0 0 ${colPx.source}px` }}
+              source={source}
+              onChange={applySource}
+              issues={parsed.issues}
+              hasErrors={errors.length > 0}
+            />
+            <ColumnResizer onResize={handleColumnResize("source", "templates")} />
+          </>
         )}
         <TemplatesPane
+          style={{ flex: `0 0 ${colPx.templates}px` }}
           templates={doc.templateOrder}
           active={activeSection}
           tree={activeSection ? doc.templates[activeSection] ?? [] : []}
@@ -429,14 +466,22 @@ export default function App() {
           onDelete={deleteTemplate}
           onNodesChange={handleTemplateChange}
         />
+        <ColumnResizer onResize={handleColumnResize("templates", "root")} />
         <RootDesignerPane
+          style={{ flex: `0 0 ${colPx.root}px` }}
           name={doc.name}
           onNameChange={setDocName}
           tree={doc.root}
           templates={doc.templateOrder}
           onNodesChange={handleRootChange}
         />
-        <PreviewPane stats={stats} tree={resolved.tree} errors={resolved.errors} />
+        <ColumnResizer onResize={handleColumnResize("root", "preview")} />
+        <PreviewPane
+          style={{ flex: "1 1 0" }}
+          stats={stats}
+          tree={resolved.tree}
+          errors={resolved.errors}
+        />
       </main>
 
       <footer className="statusbar">

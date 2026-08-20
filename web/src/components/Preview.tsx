@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FsNode } from "../lib/types";
 import { computeMaxDepth, gradientColor } from "../lib/resolver";
 import { ChevronIcon, FileIcon, FolderIcon, FolderArrowIcon } from "./icons";
@@ -8,9 +8,30 @@ interface PreviewProps {
   errors: string[];
 }
 
+const INDENT_BASE = 20;
+const INDENT_MAX = 150;
+const INDENT_MIN = 6;
+
 export default function Preview({ tree, errors }: PreviewProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [bodyWidth, setBodyWidth] = useState(0);
   const maxDepth = computeMaxDepth(tree);
+
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setBodyWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Shrink the indentation step as the pane narrows or the tree gets deeper,
+  // so deep nodes still have room for their text.
+  const step =
+    bodyWidth > 0 && maxDepth > 0
+      ? Math.max(INDENT_MIN, Math.min(INDENT_BASE, (bodyWidth - 90) / maxDepth))
+      : INDENT_BASE;
 
   const toggle = (id: string) =>
     setCollapsed((prev) => {
@@ -41,7 +62,7 @@ export default function Preview({ tree, errors }: PreviewProps) {
     const color = gradientColor([47, 129, 247], [63, 185, 80], maxDepth ? depth / maxDepth : 0);
 
     return (
-      <div key={node.id} style={{ paddingLeft: depth * 20 }}>
+      <div key={node.id} style={{ paddingLeft: Math.min(depth * step, INDENT_MAX) }}>
         <div
           className={`preview-node ${hasChildren ? "clickable" : ""}`}
           onClick={() => hasChildren && toggle(node.id)}
@@ -70,7 +91,7 @@ export default function Preview({ tree, errors }: PreviewProps) {
 
   if (errors.length) {
     return (
-      <div className="pane-body">
+      <div className="pane-body" ref={bodyRef}>
         <div className="issue-banner error">
           <ul>
             {errors.map((e, i) => (
@@ -87,7 +108,7 @@ export default function Preview({ tree, errors }: PreviewProps) {
   }
 
   return (
-    <div className="pane-body">
+    <div className="pane-body" ref={bodyRef}>
       {tree.length === 0 ? (
         <div className="empty-hint">
           <div className="big">🌳</div>
