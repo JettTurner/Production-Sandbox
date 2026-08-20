@@ -17,17 +17,14 @@ function highlightSource(source: string): string {
         return `<span class="tok-comment">${escapeHtml(line)}</span>`;
       }
       let html = escapeHtml(line);
-      html = html.replace(
-        /(@(?:version|name|root|template|insert|state|states|location)\b)/g,
-        '<span class="tok-dir">$1</span>',
-      );
+      // Order matters: labels first (no markup present yet), so regexes never
+      // match against already-injected tag attributes.
       html = html.replace(/("(?:[^"]*)")/g, '<span class="tok-label">$1</span>');
-      // Color the value of @version / @name
+      html = html.replace(/@(version|name|root|template|insert|state|states|location)\b/g, '<span class="tok-dir">@$1</span>');
       html = html.replace(
-        /(<span class="tok-dir">@(?:version|name)<\/span>\s+)([^"#]+)/,
+        /(<span class="tok-dir">@(?:version|name)<\/span>\s+)([^"#<]+)/,
         '$1<span class="tok-meta">$2</span>',
       );
-      // Color template/insert names
       html = html.replace(
         /(<span class="tok-dir">@(?:template|insert)<\/span>\s+)([\w\-_.]+)/,
         '$1<span class="tok-string">$2</span>',

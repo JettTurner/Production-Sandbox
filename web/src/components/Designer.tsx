@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FsNode } from "../lib/types";
-import { makeFolder, makeInsert, moveNode, removeNode, updateNode, insertChild } from "../lib/treeEdit";
+import { makeFolder, makeInsert, removeNode, insertChild } from "../lib/treeEdit";
 import { ChevronIcon, CopyIcon, FileIcon, FolderIcon, GripIcon, PlusIcon, XIcon } from "./icons";
 
 export interface SectionRef {
@@ -20,10 +20,29 @@ interface DropState {
   position: "before" | "after" | "into";
 }
 
+interface EditState {
+  path: number[];
+  value: string;
+}
+
+type AddSpec =
+  | { kind: "folder" }
+  | { kind: "file" }
+  | { kind: "insert"; template: string };
+
 export default function Designer({ nodes, section, templates, onNodesChange }: DesignerProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropState, setDropState] = useState<DropState | null>(null);
+  const [editing, setEditing] = useState<EditState | null>(null);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!menuFor) return;
+    const close = () => setMenuFor(null);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menuFor]);
 
   const toggle = (id: string) =>
     setCollapsed((prev) => {
@@ -41,46 +60,62 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
     setDropState(null);
   };
 
-  const addChild = (parentId: string | null, kind: "folder" | "insert", index: number) => {
-    const node = kind === "insert" ? makeInsert(templates[0] ?? "TEMPLATE") : makeFolder("New Folder");
-    onNodesChange(insertChild(nodes, parentId, index, node));
+  const addNode = (parentId: string | null, spec: AddSpec) => {
+    const node =
+      spec.kind === "insert"
+        ? makeInsert(spec.template)
+        : makeFolder(spec.kind === "file" ? "Untitled.txt" : "New Folder");
+    const parent = parentId ? findNode(nodes, parentId) : null;
+    const siblings = parent ? parent.children : nodes;
+    const newTree = insertChild(nodes, parentId, siblings.length, node);
+    onNodesChange(newTree);
+    setMenuFor(null);
+    const path = pathOf(newTree, node.id);
+    setEditing(path ? { path, value: node.name } : null);
     if (parentId) setCollapsed((prev) => { const n = new Set(prev); n.delete(parentId); return n; });
   };
 
-  const remove = (id: string) => onNodesChange(removeNode(nodes, id));
-
-  const rename = (id: string, name: string) => {
-    if (name.trim() && name.trim() !== "") {
-      onNodesChange(updateNode(nodes, id, (n) => ({ ...n, name: name.trim() })));
-    }
+  const renameAt = (path: number[], name: string) => {
+    if (name.trim()) onNodesChange(renameByPath(nodes, path, name.trim()));
+    setEditing(null);
   };
 
-  const changeInsertTemplate = (id: string, template: string) => {
-    onNodesChange(updateNode(nodes, id, (n) => ({ ...n, name: template })));
+  const duplicateAt = (path: number[], node: FsNode) => {
+    const clone = structuredClone(node);
+    clone.id = Math.random().toString(36).slice(2, 10);
+    const newTree = insertChild(nodes, path.length ? parentIdAt(nodes, path) : null, path[path.length - 1] + 1, clone);
+    onNodesChange(newTree);
+    const newPath = pathOf(newTree, clone.id);
+    setEditing(newPath ? { path: newPath, value: clone.name } : null);
   };
 
-  const duplicate = (id: string) => {
-    const copy = structuredClone(findNode(nodes, id));
-    if (!copy) return;
-    copy.id = Math.random().toString(36).slice(2, 10);
-    const parent = findParent(nodes, id);
-    if (!parent) return;
-    const siblings = parent.kind === "root" ? nodes : parent.node.children;
-    const idx = siblings.findIndex((n) => n.id === id);
-    onNodesChange(insertChild(nodes, parent.kind === "root" ? null : parent.node.id, idx + 1, copy));
+  const deleteAt = (path: number[]) => {
+    const id = nodeAt(nodes, path)?.id;
+    if (id) onNodesChange(removeNode(nodes, id));
+    if (editing && pathsEqual(path, editing.path)) setEditing(null);
   };
 
-  const renderNode = (node: FsNode, depth: number) => {
+  const moveAt = (path: number[], dir: -1 | 1) => {
+    const loc = locatedAt(nodes, path);
+    if (!loc) return;
+    const siblings = loc.container;
+    const target = loc.index + dir;
+    if (target < 0 || target >= siblings.length) return;
+    const next = removeNode(nodes, loc.node.id);
+    onNodesChange(insertChild(next, path.length ? parentIdAt(nodes, path) : null, target, loc.node));
+  };
+
+  const renderNode = (node: FsNode, depth: number, path: number[]) => {
     const isCollapsed = collapsed.has(node.id);
     const children = node.children;
     const insertable = node.kind === "folder";
     const dropTarget = dropState?.targetId === node.id ? dropState.position : null;
+    const isEditing = editing ? pathsEqual(path, editing.path) : false;
 
     return (
-      <div key={node.id} style={{ paddingLeft: depth * 18 }}>
+      <div key={node.id} style={{ paddingLeft: depth * 20 }}>
         <div
           className={`tree-row ${dragId === node.id ? "dragging" : ""} ${dropTarget ? "droppable" : ""}`}
-          draggable={false}
           onDragOver={(e) => {
             e.preventDefault();
             e.dataTransfer.dropEffect = "move";
@@ -133,8 +168,9 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
               <span className="name insert-name">@insert</span>
               <select
                 value={node.name}
-                onChange={(e) => changeInsertTemplate(node.id, e.target.value)}
+                onChange={(e) => onNodesChange(updateName(nodes, node.id, e.target.value))}
                 onDragOver={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
               >
                 {templates.length ? (
                   templates.map((t) => (
@@ -148,7 +184,14 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
               </select>
             </span>
           ) : (
-            <EditableName node={node} onCommit={(name) => rename(node.id, name)} />
+            <NodeName
+              node={node}
+              editing={isEditing}
+              value={isEditing && editing ? editing.value : node.name}
+              onChange={(v) => setEditing({ path, value: v })}
+              onStart={() => setEditing({ path, value: node.name })}
+              onCommit={(name) => renameAt(path, name)}
+            />
           )}
 
           {node.kind === "folder" && (
@@ -158,27 +201,35 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
           )}
 
           <span className="hover-actions">
-            {insertable && (
-              <>
-                <IconButton title="Add subfolder" onClick={() => addChild(node.id, "folder", node.children.length)}>
-                  <FolderIcon />
-                </IconButton>
-                {templates.length > 0 && (
-                  <IconButton title="Insert template" onClick={() => addChild(node.id, "insert", node.children.length)}>
-                    <CopyIcon />
-                  </IconButton>
-                )}
-              </>
-            )}
-            <IconButton title="Duplicate" onClick={() => duplicate(node.id)}>
+            <IconButton title="Add…" onClick={() => setMenuFor(menuFor === node.id ? null : node.id)}>
+              <PlusIcon />
+            </IconButton>
+            <IconButton title="Move up" onClick={() => moveAt(path, -1)}>
+              <ChevronIcon className="up" />
+            </IconButton>
+            <IconButton title="Move down" onClick={() => moveAt(path, 1)}>
+              <ChevronIcon className="down" />
+            </IconButton>
+            <IconButton title="Duplicate" onClick={() => duplicateAt(path, node)}>
               <CopyIcon />
             </IconButton>
-            <IconButton title="Delete" className="danger" onClick={() => remove(node.id)}>
+            <IconButton title="Delete" className="danger" onClick={() => deleteAt(path)}>
               <XIcon />
             </IconButton>
           </span>
         </div>
-        {insertable && !isCollapsed && children.length > 0 && children.map((c) => renderNode(c, depth + 1))}
+
+        {menuFor === node.id && (
+          <div style={{ padding: "4px 0 4px 12px" }}>
+            <PlusMenu
+              templates={templates}
+              onAdd={(spec) => addNode(node.id, spec)}
+              isRoot={false}
+            />
+          </div>
+        )}
+
+        {insertable && !isCollapsed && children.length > 0 && children.map((c, i) => renderNode(c, depth + 1, [...path, i]))}
       </div>
     );
   };
@@ -189,28 +240,68 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
         <div className="empty-hint">
           <div className="big">📁</div>
           {section.kind === "root"
-            ? "This structure is empty. Add your first top-level folder, or design in the code editor."
-            : `Template "@${section.name}" is empty. Add folders to reuse them with @insert.`}
-          <div style={{ marginTop: 12 }}>
-            <button className="btn primary" onClick={() => addChild(null, "folder", nodes.length)}>
-              <PlusIcon /> Add folder
-            </button>
+            ? "Design the root structure — add folders, files, or reusable structures."
+            : `Template "@${section.name}" is empty — add folders or insert another template.`}
+          <div style={{ marginTop: 12, display: "flex", justifyContent: "center", gap: 6 }}>
+            <PlusMenu templates={templates} onAdd={(s) => addNode(null, s)} isRoot />
           </div>
         </div>
       ) : (
         <>
-          {nodes.map((n) => renderNode(n, 0))}
-          <div style={{ display: "flex", gap: 8, padding: "12px 4px 4px" }}>
-            <button className="btn ghost" onClick={() => addChild(null, "folder", nodes.length)}>
-              <PlusIcon /> Add top-level folder
-            </button>
-            {templates.length > 0 && (
-              <button className="btn ghost" onClick={() => addChild(null, "insert", nodes.length)}>
-                <CopyIcon /> Insert template
-              </button>
-            )}
+          {nodes.map((n, i) => renderNode(n, 0, [i]))}
+          <div className="designer-footer">
+            <PlusMenu templates={templates} onAdd={(s) => addNode(null, s)} isRoot />
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+function PlusMenu({
+  templates,
+  onAdd,
+  isRoot,
+}: {
+  templates: string[];
+  onAdd: (spec: AddSpec) => void;
+  isRoot: boolean;
+}) {
+  const [template, setTemplate] = useState(templates[0] ?? "");
+  useEffect(() => {
+    setTemplate((t) => (templates.includes(t) ? t : templates[0] ?? ""));
+  }, [templates]);
+
+  return (
+    <div className="plus-menu" onMouseDown={(e) => e.stopPropagation()}>
+      <button className="btn" onClick={() => onAdd({ kind: "folder" })}>
+        <FolderIcon /> Folder
+      </button>
+      <button className="btn" onClick={() => onAdd({ kind: "file" })}>
+        <FileIcon /> File
+      </button>
+      <span className="plus-insert">
+        <CopyIcon />
+        <span style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--purple)" }}>@insert</span>
+        {templates.length ? (
+          <>
+            <select value={template} onChange={(e) => setTemplate(e.target.value)}>
+              {templates.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <button className="btn primary" onClick={() => onAdd({ kind: "insert", template })} title="Insert structure">
+              Insert
+            </button>
+          </>
+        ) : (
+          <span className="muted-note">no structures yet — add one in Insert Structures</span>
+        )}
+      </span>
+      {isRoot && (
+        <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Add to {isRoot ? "top level" : "this folder"}</span>
       )}
     </div>
   );
@@ -228,43 +319,89 @@ function IconButton({
   className?: string;
 }) {
   return (
-    <button className={`icon-btn ${className ?? ""}`} title={title} onClick={onClick}>
+    <button className={`icon-btn ${className ?? ""}`} title={title} onClick={onClick} onMouseDown={(e) => e.stopPropagation()}>
       {children}
     </button>
   );
 }
 
-function EditableName({ node, onCommit }: { node: FsNode; onCommit: (name: string) => void }) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(node.name);
-
+function NodeName({
+  node,
+  editing,
+  value,
+  onChange,
+  onStart,
+  onCommit,
+}: {
+  node: FsNode;
+  editing: boolean;
+  value: string;
+  onChange: (v: string) => void;
+  onStart: () => void;
+  onCommit: (name: string) => void;
+}) {
   if (editing) {
     return (
       <input
         className="name editing"
         autoFocus
         value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={() => {
-          setEditing(false);
-          onCommit(value);
-        }}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => onCommit(value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            setEditing(false);
-            onCommit(value);
-          }
-          if (e.key === "Escape") setEditing(false);
+          if (e.key === "Enter") onCommit(value);
+          if (e.key === "Escape") onCommit(node.name);
+          e.stopPropagation();
         }}
       />
     );
   }
   return (
-    <span className="name" title={`${node.name}${node.label ? ` — ${node.label}` : ""}`} onDoubleClick={() => { setValue(node.name); setEditing(true); }}>
+    <span className="name" title={node.name} onDoubleClick={onStart}>
       {node.name}
       {node.label && <span className="label">{node.label}</span>}
     </span>
   );
+}
+
+// ---------- path helpers ----------
+function nodeAt(nodes: FsNode[], path: number[]): FsNode | null {
+  let list = nodes;
+  let node: FsNode | null = null;
+  for (const i of path) {
+    if (!list[i]) return null;
+    node = list[i];
+    list = node.children;
+  }
+  return node;
+}
+
+function parentIdAt(nodes: FsNode[], path: number[]): string | null {
+  if (path.length <= 1) return null;
+  return nodeAt(nodes, path.slice(0, -1))?.id ?? null;
+}
+
+function locatedAt(nodes: FsNode[], path: number[]): { container: FsNode[]; index: number; node: FsNode } | null {
+  if (path.length === 1) {
+    return { container: nodes, index: path[0], node: nodes[path[0]] };
+  }
+  const parent = nodeAt(nodes, path.slice(0, -1));
+  if (!parent) return null;
+  const i = path[path.length - 1];
+  return { container: parent.children, index: i, node: parent.children[i] };
+}
+
+function pathsEqual(a: number[], b: number[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+function pathOf(nodes: FsNode[], id: string, acc: number[] = []): number[] | null {
+  for (let i = 0; i < nodes.length; i++) {
+    if (nodes[i].id === id) return [...acc, i];
+    const found = pathOf(nodes[i].children, id, [...acc, i]);
+    if (found) return found;
+  }
+  return null;
 }
 
 function findNode(nodes: FsNode[], id: string): FsNode | null {
@@ -276,15 +413,46 @@ function findNode(nodes: FsNode[], id: string): FsNode | null {
   return null;
 }
 
-function findParent(
-  nodes: FsNode[],
-  id: string,
-): { kind: "root" | "node"; node: FsNode } | null {
-  if (nodes.some((n) => n.id === id)) return { kind: "root", node: null as unknown as FsNode };
-  for (const n of nodes) {
-    if (n.children.some((c) => c.id === id)) return { kind: "node", node: n };
-    const found = findParent(n.children, id);
-    if (found) return found;
+function updateName(nodes: FsNode[], id: string, name: string): FsNode[] {
+  return nodes.map((n) => (n.id === id ? { ...n, name } : { ...n, children: updateName(n.children, id, name) }));
+}
+
+function renameByPath(nodes: FsNode[], path: number[], name: string): FsNode[] {
+  if (path.length === 1) {
+    return nodes.map((n, i) => (i === path[0] ? { ...n, name } : n));
   }
-  return null;
+  return nodes.map((n, i) =>
+    i === path[0] ? { ...n, children: renameByPath(n.children, path.slice(1), name) } : n,
+  );
+}
+
+function moveNode(nodes: FsNode[], dragId: string, targetId: string, position: "before" | "after" | "into"): FsNode[] {
+  if (dragId === targetId) return nodes;
+  const dragPath = pathOf(nodes, dragId);
+  const targetPath = pathOf(nodes, targetId);
+  if (!dragPath || !targetPath) return nodes;
+  const dragged = nodeAt(nodes, dragPath)!;
+  const isDescendant = targetPath.length > dragPath.length && dragPath.every((v, i) => targetPath[i] === v);
+  if (position === "into" && isDescendant) return nodes;
+  const next = removeNode(nodes, dragId);
+  const newTargetPath = pathOf(next, targetId);
+  if (!newTargetPath) return next;
+  if (position === "into") {
+    return insertInto(next, newTargetPath, dragged, 0);
+  }
+  const index = newTargetPath[newTargetPath.length - 1] + (position === "after" ? 1 : 0);
+  return insertInto(next, newTargetPath, dragged, index);
+}
+
+function insertInto(nodes: FsNode[], targetPath: number[], node: FsNode, offset: number): FsNode[] {
+  if (targetPath.length === 1) {
+    const arr = [...nodes];
+    arr.splice(targetPath[0] + offset, 0, node);
+    return arr;
+  }
+  return nodes.map((n, i) => {
+    if (i !== targetPath[0]) return n;
+    const children = insertInto(n.children, targetPath.slice(1), node, offset);
+    return { ...n, children };
+  });
 }

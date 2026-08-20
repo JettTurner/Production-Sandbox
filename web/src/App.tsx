@@ -343,44 +343,53 @@ export default function App() {
           <div className="pane-head">
             <span className="title">Designer</span>
             <div className="right">
-              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Double-click to rename · drag to move</span>
+              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>double-click to rename · drag to move · ＋ to add</span>
             </div>
           </div>
-          <div className="section-tabs" style={{ padding: "6px 10px", borderBottom: "1px solid var(--border)" }}>
-            <button
-              className={`section-tab ${section.kind === "root" ? "active" : ""}`}
-              onClick={() => setActiveSection(null)}
-              title="Edit the top-level structure"
-            >
-              Root
-            </button>
-            {doc.templateOrder.map((name) => (
-              <button
-                key={name}
-                className={`section-tab tmpl ${activeSection === name ? "active" : ""}`}
-                onClick={() => setActiveSection(activeSection === name ? null : name)}
-                title={`Edit template "${name}"`}
-              >
-                {name}
-              </button>
-            ))}
-          </div>
-          <div className="pane-body">
-            <TemplatesPanel
-              doc={doc}
-              activeTemplate={activeSection}
-              onSelect={(name) => setActiveSection(name)}
-              onAdd={addTemplate}
-              onRename={renameTemplate}
-              onDelete={deleteTemplate}
-            />
-            <div style={{ borderTop: "1px solid var(--border)", marginTop: 4 }}>
-              <Designer
-                nodes={sectionNodes}
-                section={section}
-                templates={doc.templateOrder}
-                onNodesChange={handleSectionNodesChange}
-              />
+          <div className="designer-split">
+            <div className="design-area">
+              <div className="sub-head">
+                <span className="title">Design</span>
+                <select
+                  value={activeSection ?? "__root__"}
+                  onChange={(e) => setActiveSection(e.target.value === "__root__" ? null : e.target.value)}
+                >
+                  <option value="__root__">Root structure</option>
+                  {doc.templateOrder.map((name) => (
+                    <option key={name} value={name}>
+                      Template: {name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="pane-body">
+                <Designer
+                  nodes={sectionNodes}
+                  section={section}
+                  templates={doc.templateOrder}
+                  onNodesChange={handleSectionNodesChange}
+                />
+              </div>
+            </div>
+            <div className="insert-area">
+              <div className="sub-head">
+                <span className="title">Insert Structures</span>
+                <div className="right">
+                  <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                    click a structure to design it · @insert it into the tree with ＋
+                  </span>
+                </div>
+              </div>
+              <div className="pane-body">
+                <TemplatesPanel
+                  doc={doc}
+                  activeTemplate={activeSection}
+                  onSelect={(name) => setActiveSection(name)}
+                  onAdd={addTemplate}
+                  onRename={renameTemplate}
+                  onDelete={deleteTemplate}
+                />
+              </div>
             </div>
           </div>
         </section>

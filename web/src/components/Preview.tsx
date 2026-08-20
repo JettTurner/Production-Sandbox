@@ -41,7 +41,7 @@ export default function Preview({ tree, errors }: PreviewProps) {
     const color = gradientColor([47, 129, 247], [63, 185, 80], maxDepth ? depth / maxDepth : 0);
 
     return (
-      <div key={node.id}>
+      <div key={node.id} style={{ paddingLeft: depth * 20 }}>
         <div className="preview-node">
           {hasChildren ? (
             <button className={`chev ${isCollapsed ? "rot" : ""}`} onClick={() => toggle(node.id)} title={isCollapsed ? "Expand" : "Collapse"}>
