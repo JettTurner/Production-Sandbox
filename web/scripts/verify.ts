@@ -7,7 +7,8 @@ import { join } from "node:path";
 import { parseFh } from "../src/lib/parser";
 import { resolveDoc, countNodes } from "../src/lib/resolver";
 import { serializeFh } from "../src/lib/serializer";
-import { parseFh as parseFhAgain } from "../src/lib/parser";
+import { removeNode, insertChild, updateNode } from "../src/lib/treeEdit";
+import { makeFolder } from "../src/lib/treeEdit";
 
 let failures = 0;
 function check(cond: boolean, label: string) {
@@ -54,6 +55,38 @@ for (const file of files) {
 
 // specific behaviors
 console.log(`\n== behavior checks ==`);
+{
+  // ---- tree editing must preserve the full tree (regression for delete/add) ----
+  const { doc } = parseFh(`@root\nA\n\tB\n\t\tC\nD\n`);
+  check(!!doc, "tree-edit fixture parses");
+  if (doc) {
+    const tree = doc.root;
+    const a = tree[0];
+    const b = a.children[0];
+    const c = b.children[0];
+    const d = tree[1];
+
+    const afterRemove = removeNode(tree, c.id);
+    check(afterRemove.length === 2 && afterRemove[0].name === "A", "remove nested node keeps the full tree");
+    check(
+      afterRemove[0].children[0].name === "B" && afterRemove[0].children[0].children.length === 0,
+      "removed node's parent remains intact",
+    );
+    check(afterRemove[1].name === "D", "sibling D unaffected by nested removal");
+
+    const child = makeFolder("X");
+    const afterInsert = insertChild(tree, b.id, 1, child);
+    check(afterInsert.length === 2 && afterInsert[0].name === "A", "insert nested child keeps the full tree");
+    check(afterInsert[0].children[0].children.map((n) => n.name).join(",") === "C,X", "nested child inserted into B");
+
+    const afterUpdate = updateNode(tree, b.id, (n) => ({ ...n, name: "B2" }));
+    check(afterUpdate[0].name === "A" && afterUpdate[0].children[0].name === "B2", "update nested node keeps the full tree");
+    check(afterUpdate[1].name === "D", "sibling D unaffected by nested update");
+
+    const afterTopRemove = removeNode(tree, d.id);
+    check(afterTopRemove.length === 1 && afterTopRemove[0].name === "A", "remove top-level node works");
+  }
+}
 {
   const src = `@root\nA\n\t@insert B\n\n@template B\n\tC\n`;
   const { doc } = parseFh(src);

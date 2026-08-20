@@ -596,11 +596,21 @@ button {
   white-space: nowrap;
 }
 .tree-row .hover-actions {
-  display: none;
-  gap: 2px;
-}
-.tree-row:hover .hover-actions {
   display: inline-flex;
+  gap: 2px;
+  margin-left: 6px;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.tree-row:hover .hover-actions,
+.tree-row:focus-within .hover-actions {
+  visibility: visible;
+  opacity: 1;
+}
+.tree-row .hover-actions .icon-btn {
+  width: 22px;
+  height: 22px;
 }
 
 .insert-picker {

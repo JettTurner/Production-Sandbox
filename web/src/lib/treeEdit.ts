@@ -26,10 +26,16 @@ export function cloneTree(nodes: FsNode[]): FsNode[] {
 export function updateNode(root: FsNode[], id: string, updater: (n: FsNode) => FsNode): FsNode[] {
   const path = findPath(root, id);
   if (!path) return root;
-  const [head] = path;
-  const next = [...head.container];
-  next[head.index] = updater(next[head.index]);
-  return next;
+  const indices = path.map((p) => p.index);
+  return updateByIndices(root, indices, updater);
+}
+
+function updateByIndices(nodes: FsNode[], indices: number[], updater: (n: FsNode) => FsNode): FsNode[] {
+  const [i, ...rest] = indices;
+  if (rest.length === 0) {
+    return nodes.map((n, idx) => (idx === i ? updater(n) : n));
+  }
+  return nodes.map((n, idx) => (idx === i ? { ...n, children: updateByIndices(n.children, rest, updater) } : n));
 }
 
 export function insertChild(root: FsNode[], parentId: string | null, index: number, node: FsNode): FsNode[] {
@@ -48,10 +54,14 @@ export function insertChild(root: FsNode[], parentId: string | null, index: numb
 export function removeNode(root: FsNode[], id: string): FsNode[] {
   const path = findPath(root, id);
   if (!path) return root;
-  const [head] = path;
-  const next = [...head.container];
-  next.splice(head.index, 1);
-  return next;
+  const indices = path.map((p) => p.index);
+  return removeByIndices(root, indices);
+}
+
+function removeByIndices(nodes: FsNode[], indices: number[]): FsNode[] {
+  const [i, ...rest] = indices;
+  if (rest.length === 0) return nodes.filter((_, idx) => idx !== i);
+  return nodes.map((n, idx) => (idx === i ? { ...n, children: removeByIndices(n.children, rest) } : n));
 }
 
 export function moveNode(root: FsNode[], dragId: string, targetId: string, position: "before" | "after" | "into"): FsNode[] {
