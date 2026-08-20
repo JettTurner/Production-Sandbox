@@ -6,11 +6,14 @@ interface ColumnResizerProps {
 
 export default function ColumnResizer({ onResize }: ColumnResizerProps) {
   const [dragging, setDragging] = useState(false);
-  const startRef = useRef(0);
+  const lastXRef = useRef(0);
 
   useEffect(() => {
     if (!dragging) return;
-    const move = (e: MouseEvent) => onResize(e.clientX - startRef.current);
+    const move = (e: MouseEvent) => {
+      onResize(e.clientX - lastXRef.current);
+      lastXRef.current = e.clientX;
+    };
     const up = () => setDragging(false);
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
@@ -25,7 +28,7 @@ export default function ColumnResizer({ onResize }: ColumnResizerProps) {
       className={`col-resizer ${dragging ? "active" : ""}`}
       onMouseDown={(e) => {
         e.preventDefault();
-        startRef.current = e.clientX;
+        lastXRef.current = e.clientX;
         setDragging(true);
       }}
       role="separator"
