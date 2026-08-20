@@ -1,0 +1,214 @@
+@version 3.0
+@name PBK Project Creation Project Management Structure
+
+#---Root---
+@root
+DOMAIN
+	@insert EVENT_TEMP
+	@insert PROJ_TEMP
+	@insert TASK_TEMP
+	@insert PHASE_TEMP
+	@insert USER_TEMP
+	@insert ROLE_TEMP
+	@insert NOTIFICATION_TEMP
+	@insert HISTORY_TEMP
+APPLICATION
+	commands
+		create_project.py
+		complete_task.py
+		advance_phase.py
+		assign_role.py
+		send_notification.py
+	queries
+		get_project.py
+		list_tasks.py
+		get_dashboard_data.py
+	validators
+		project_validator.py
+		task_validator.py
+		user_validator.py
+	workflows
+		project_lifecycle.py
+		phase_progress.py
+		asset_generation.py
+	notifications
+		notification_handler.py
+INFRASTRUCTURE
+	events
+		in_memory_bus.py
+		file_event_store.py
+		message_queue_bus.py
+	storage
+		filesystem_store.py
+		sql_store.py
+	cache
+		thumbnail_cache.py
+		metadata_cache.py
+	background_jobs
+		job_runner.py
+		scheduler.py
+	config
+		settings.py
+	logging
+		logger.py
+UI
+	components
+		project_card.py
+		task_list.py
+		phase_bar.py
+		task_detail.py
+		user_card.py
+		role_selector.py
+	views
+		project_view.py
+		dashboard_view.py
+		user_dashboard.py
+		admin_view.py
+	themes
+		default_theme.py
+	icons
+		default_icons.py
+SHARED
+	errors
+		domain_errors.py
+		application_errors.py
+	constants
+		status_constants.py
+		priority_constants.py
+	types
+		datatypes.py
+	utils
+		datetime_utils.py
+		serialization_utils.py
+		uuid_utils.py
+TEST
+	domain
+		test_project.py
+		test_task.py
+		test_phase.py
+		test_user.py
+		test_role.py
+		test_notification.py
+		test_history.py
+	application
+		test_commands.py
+		test_queries.py
+		test_validators.py
+		test_workflows.py
+	infrastructure
+		test_storage.py
+		test_events.py
+		test_cache.py
+		test_background_jobs.py
+	ui
+		test_components.py
+		test_views.py
+integration
+	test_integration_workflows.py
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+
+#--- Templates ---
+@template EVENT_TEMP
+	Event
+	# Project Lifecycle Events
+		project_created.event.py
+		project_started.event.py
+		project_paused.event.py
+		project_completed.event.py
+		project_archived.event.py
+		project_deleted.event.py
+
+	# Task Lifecycle Events
+		task_created.event.py
+		task_assigned.event.py
+		task_unassigned.event.py
+		task_updated.event.py
+		task_completed.event.py
+		task_deleted.event.py
+
+	# Phase Events
+		phase_started.event.py
+		phase_paused.event.py
+		phase_completed.event.py
+		phase_skipped.event.py
+		phase_changed.event.py
+
+	# User / Role Events
+		user_created.event.py
+		user_updated.event.py
+		user_deleted.event.py
+		user_role_changed.event.py
+		user_role_removed.event.py
+
+	# Notification / System Events
+		notification_sent.event.py
+		notification_failed.event.py
+		cache_invalidated.event.py
+		cache_refreshed.event.py
+		job_scheduled.event.py
+		job_completed.event.py
+
+	# Optional / Collaboration Events
+		project_template_applied.event.py
+		task_comment_added.event.py
+		attachment_uploaded.event.py
+		tag_added.event.py
+		tag_removed.event.py
+
+@template PROJ_TEMP
+	Project
+		Project.Types.py
+		Project.Schema.py
+		Project.Model.py
+		Project.Logic.py
+		Project.Errors.py
+
+@template TASK_TEMP
+	Task
+		Task.Types.py
+		Task.Schema.py
+		Task.Model.py
+		Task.Logic.py
+		Task.Errors.py
+
+@template PHASE_TEMP
+	Phase
+		Phase.Types.py
+		Phase.Schema.py
+		Phase.Model.py
+		Phase.Logic.py
+		Phase.Errors.py
+
+@template USER_TEMP
+	User
+		User.Types.py
+		User.Schema.py
+		User.Model.py
+		User.Logic.py
+		User.Errors.py
+
+@template ROLE_TEMP
+	Role
+		Role.Types.py
+		Role.Schema.py
+		Role.Model.py
+		Role.Logic.py
+		Role.Errors.py
+
+@template NOTIFICATION_TEMP
+	Notification
+		Notification.Types.py
+		Notification.Schema.py
+		Notification.Model.py
+		Notification.Logic.py
+		Notification.Errors.py
+
+@template HISTORY_TEMP
+	History
+		History.Types.py
+		History.Schema.py
+		History.Model.py
+		History.Logic.py
+		History.Errors.py
