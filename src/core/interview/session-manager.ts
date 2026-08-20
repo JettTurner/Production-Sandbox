@@ -199,6 +199,12 @@ export class InterviewSession {
       status: this.status,
       knowledgeState: this.state.serialize(),
       branchTracker: this.branchTracker.serialize(),
+      questionHistory: this.questionHistory.map(h => ({
+        questionId: h.questionId,
+        answer: h.answer,
+        factIds: h.factIds,
+        followUpIds: h.followUpIds,
+      })),
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };
@@ -211,6 +217,14 @@ export class InterviewSession {
     session.updatedAt = data.updatedAt;
     session.state = KnowledgeStateManager.deserialize(data.knowledgeState);
     session.branchTracker = BranchTracker.deserialize(data.branchTracker);
+    if (data.questionHistory) {
+      session.questionHistory = data.questionHistory.map(h => ({
+        questionId: h.questionId,
+        answer: h.answer,
+        factIds: h.factIds,
+        followUpIds: h.followUpIds,
+      }));
+    }
     return session;
   }
 }
