@@ -294,8 +294,36 @@ button {
 .code-wrap {
   position: relative;
   height: 100%;
-  overflow: auto;
+  overflow: hidden;
   background: #0b0f14;
+}
+.code-linearea {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: stretch;
+}
+.code-editor {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.code-gutter {
+  flex: 0 0 auto;
+  margin: 0;
+  min-width: 42px;
+  padding: 12px 10px;
+  text-align: right;
+  color: #484f58;
+  background: #0d1117;
+  border-right: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre;
+  overflow: hidden;
+  user-select: none;
+  pointer-events: none;
 }
 .code-backdrop,
 .code-input {
