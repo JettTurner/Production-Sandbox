@@ -782,7 +782,8 @@ button {
 }
 .preview-node {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 2px 6px;
   border-radius: var(--radius-sm);
@@ -804,15 +805,24 @@ button {
   color: var(--muted);
   padding: 0;
   border-radius: 4px;
+  flex: 0 0 auto;
+  margin-top: 2px;
 }
 .preview-node .chev:hover {
   background: var(--bg-elev);
   color: var(--text);
 }
+.preview-node .node-icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
 .preview-node .name {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 .preview-node .name.file {
   color: #79c0ff;
@@ -825,6 +835,8 @@ button {
   border: 1px solid var(--border);
   color: var(--muted);
   white-space: nowrap;
+  flex: 0 0 auto;
+  margin-top: 2px;
 }
 .preview-node .badge.file {
   color: var(--orange);

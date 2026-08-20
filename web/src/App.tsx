@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import CodePane from "./components/CodePane";
-import Designer from "./components/Designer";
-import Preview from "./components/Preview";
-import SectionPicker from "./components/SectionPicker";
+import PreviewPane from "./components/panes/PreviewPane";
+import RootDesignerPane from "./components/panes/RootDesignerPane";
+import SourcePane from "./components/panes/SourcePane";
+import TemplatesPane from "./components/panes/TemplatesPane";
 import {
   CodeIcon,
   CopyIcon,
@@ -416,117 +416,27 @@ export default function App() {
       </header>
 
       <main className="main">
-        {/* ---------- Source sidebar (collapsible) ---------- */}
         {sourceOpen && (
-          <section className="pane source-sidebar">
-            <div className="pane-head">
-              <span className="title">Source (.fh)</span>
-              <div className="right">
-                <span className="preview-stats">
-                  <span>{source.split("\n").length} lines</span>
-                </span>
-              </div>
-            </div>
-            <div className="pane-body">
-              <CodePane source={source} onChange={applySource} />
-            </div>
-            {parsed.issues.length > 0 && (
-              <div className={`issue-banner ${errors.length ? "error" : "warning"}`}>
-                <ul>
-                  {parsed.issues.slice(0, 8).map((issue, i) => (
-                    <li key={i}>
-                      {issue.line ? `Line ${issue.line}: ` : ""}
-                      {issue.message}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </section>
+          <SourcePane source={source} onChange={applySource} issues={parsed.issues} hasErrors={errors.length > 0} />
         )}
-
-        {/* ---------- Template Editor ---------- */}
-        <section className="pane template-pane">
-          <div className="pane-head">
-            <span className="title">Templates</span>
-            <div className="right">
-              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>reusable structures</span>
-            </div>
-          </div>
-          <SectionPicker
-            templates={doc.templateOrder}
-            active={activeSection}
-            onSelect={setActiveSection}
-            onAdd={addTemplate}
-            onRename={renameTemplate}
-            onDelete={deleteTemplate}
-          />
-          <div className="pane-body">
-            {activeSection && doc.templates[activeSection] ? (
-              <Designer
-                nodes={doc.templates[activeSection]}
-                section={{ kind: "template", name: activeSection }}
-                templates={doc.templateOrder}
-                onNodesChange={handleTemplateChange}
-              />
-            ) : (
-              <div className="empty-hint">
-                <div className="big">🗂️</div>
-                Select a template above to design it, or add a new one with + Template.
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* ---------- Root Designer ---------- */}
-        <section className="pane">
-          <div className="pane-head">
-            <span className="title">Root Designer</span>
-            <div className="right">
-              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>double-click to rename · drag to move · ＋ to add</span>
-            </div>
-          </div>
-          <div className="sub-head">
-            <span className="title">Name</span>
-            <input
-              className="name-input"
-              value={doc.name}
-              onChange={(e) => setDocName(e.target.value)}
-              placeholder="Structure name"
-              title="Name of this folder structure (writes the @name line)"
-              spellCheck={false}
-            />
-          </div>
-          <div className="pane-body">
-            <Designer
-              nodes={doc.root}
-              section={{ kind: "root" }}
-              templates={doc.templateOrder}
-              onNodesChange={handleRootChange}
-            />
-          </div>
-        </section>
-
-        {/* ---------- Preview ---------- */}
-        <section className="pane">
-          <div className="pane-head">
-            <span className="title">Resolved Preview</span>
-            <div className="right">
-              <span className="preview-stats">
-                <span className="blue">
-                  <b>{stats.folders}</b> folders
-                </span>
-                <span className="green">
-                  <b>{stats.files}</b> files
-                </span>
-                <span>
-                  <b>{stats.total}</b> total
-                </span>
-              </span>
-            </div>
-          </div>
-          <Preview tree={resolved.tree} errors={resolved.errors} />
-        </section>
+        <TemplatesPane
+          templates={doc.templateOrder}
+          active={activeSection}
+          tree={activeSection ? doc.templates[activeSection] ?? [] : []}
+          onSelect={setActiveSection}
+          onAdd={addTemplate}
+          onRename={renameTemplate}
+          onDelete={deleteTemplate}
+          onNodesChange={handleTemplateChange}
+        />
+        <RootDesignerPane
+          name={doc.name}
+          onNameChange={setDocName}
+          tree={doc.root}
+          templates={doc.templateOrder}
+          onNodesChange={handleRootChange}
+        />
+        <PreviewPane stats={stats} tree={resolved.tree} errors={resolved.errors} />
       </main>
 
       <footer className="statusbar">
