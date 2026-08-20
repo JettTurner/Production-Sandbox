@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FsNode } from "../lib/types";
-import { makeFolder, makeInsert, removeNode, insertChild } from "../lib/treeEdit";
+import { makeFolder, makeInsert, moveNode, removeNode, insertChild } from "../lib/treeEdit";
 import { ChevronIcon, CopyIcon, FileIcon, FolderIcon, GripIcon, PlusIcon, XIcon } from "./icons";
 
 export interface SectionRef {
@@ -127,7 +127,12 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
             const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
             const y = e.clientY - rect.top;
             const third = rect.height / 3;
-            const position: DropState["position"] = y < third ? "before" : y > rect.height - third ? "after" : "into";
+            let position: DropState["position"];
+            if (node.kind === "folder") {
+              position = y < third ? "before" : y > rect.height - third ? "after" : "into";
+            } else {
+              position = y < third ? "before" : "after";
+            }
             if (!dropState || dropState.targetId !== node.id || dropState.position !== position) {
               setDropState({ targetId: node.id, position });
             }
@@ -463,35 +468,4 @@ function renameByPath(nodes: FsNode[], path: number[], name: string): FsNode[] {
   return nodes.map((n, i) =>
     i === path[0] ? { ...n, children: renameByPath(n.children, path.slice(1), name) } : n,
   );
-}
-
-function moveNode(nodes: FsNode[], dragId: string, targetId: string, position: "before" | "after" | "into"): FsNode[] {
-  if (dragId === targetId) return nodes;
-  const dragPath = pathOf(nodes, dragId);
-  const targetPath = pathOf(nodes, targetId);
-  if (!dragPath || !targetPath) return nodes;
-  const dragged = nodeAt(nodes, dragPath)!;
-  const isDescendant = targetPath.length > dragPath.length && dragPath.every((v, i) => targetPath[i] === v);
-  if (position === "into" && isDescendant) return nodes;
-  const next = removeNode(nodes, dragId);
-  const newTargetPath = pathOf(next, targetId);
-  if (!newTargetPath) return next;
-  if (position === "into") {
-    return insertInto(next, newTargetPath, dragged, 0);
-  }
-  const index = newTargetPath[newTargetPath.length - 1] + (position === "after" ? 1 : 0);
-  return insertInto(next, newTargetPath, dragged, index);
-}
-
-function insertInto(nodes: FsNode[], targetPath: number[], node: FsNode, offset: number): FsNode[] {
-  if (targetPath.length === 1) {
-    const arr = [...nodes];
-    arr.splice(targetPath[0] + offset, 0, node);
-    return arr;
-  }
-  return nodes.map((n, i) => {
-    if (i !== targetPath[0]) return n;
-    const children = insertInto(n.children, targetPath.slice(1), node, offset);
-    return { ...n, children };
-  });
 }
