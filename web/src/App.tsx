@@ -69,6 +69,12 @@ export default function App() {
   const [sample, setSample] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const MAX_HISTORY = 30;
+  const pastRef = useRef<string[]>([]);
+  const futureRef = useRef<string[]>([]);
+  const sourceRef = useRef(DEFAULT_SOURCE);
+  const lastApplyRef = useRef(0);
+
   const notify = useCallback((msg: string, type: Toast["type"] = "success") => {
     const id = ++toastSeq;
     setToasts((prev) => [...prev, { id, type, msg }]);
@@ -86,11 +92,45 @@ export default function App() {
 
   const sectionNodes: FsNode[] = section.kind === "root" ? doc.root : doc.templates[section.name!] ?? [];
 
+  // Every source change goes through here so it can be undone. Rapid typing
+  // (within 800ms) is coalesced into one undo step; discrete actions always push.
+  const applySource = useCallback((next: string, discrete = false) => {
+    if (next === sourceRef.current) return;
+    const now = Date.now();
+    if (!discrete && now - lastApplyRef.current < 800 && pastRef.current.length) {
+      pastRef.current = [...pastRef.current.slice(0, -1), sourceRef.current];
+    } else {
+      pastRef.current = [...pastRef.current.slice(-(MAX_HISTORY - 1)), sourceRef.current];
+    }
+    lastApplyRef.current = now;
+    futureRef.current = [];
+    sourceRef.current = next;
+    setSource(next);
+  }, []);
+
+  const undo = useCallback(() => {
+    const prev = pastRef.current[pastRef.current.length - 1];
+    if (prev === undefined) return;
+    futureRef.current = [...futureRef.current, sourceRef.current].slice(-MAX_HISTORY);
+    pastRef.current = pastRef.current.slice(0, -1);
+    sourceRef.current = prev;
+    setSource(prev);
+  }, []);
+
+  const redo = useCallback(() => {
+    const next = futureRef.current[futureRef.current.length - 1];
+    if (next === undefined) return;
+    pastRef.current = [...pastRef.current, sourceRef.current].slice(-MAX_HISTORY);
+    futureRef.current = futureRef.current.slice(0, -1);
+    sourceRef.current = next;
+    setSource(next);
+  }, []);
+
   const commitDoc = useCallback(
     (next: FhDocument) => {
-      setSource(serializeFh(next));
+      applySource(serializeFh(next), true);
     },
-    [setSource],
+    [applySource],
   );
 
   const handleSectionNodesChange = useCallback(
@@ -108,7 +148,7 @@ export default function App() {
     (file: File) => {
       const reader = new FileReader();
       reader.onload = () => {
-        setSource(String(reader.result ?? ""));
+        applySource(String(reader.result ?? ""), true);
         setFileName(file.name);
         setActiveSection(null);
       };
@@ -129,7 +169,7 @@ export default function App() {
       const res = await fetch(`/samples/${value}.fh`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const text = await res.text();
-      setSource(text);
+      applySource(text, true);
       setFileName(`${value}.fh`);
       setActiveSection(null);
       notify(`Loaded sample "${value}.fh".`);
@@ -140,10 +180,10 @@ export default function App() {
     }
   };
 
-  const saveFh = () => {
+  const saveFh = useCallback(() => {
     downloadText(serializeFh(doc), fileName ?? `${doc.name}.fh`);
     notify("Saved .fh file.");
-  };
+  }, [doc, fileName, notify]);
 
   // Edits the @name directive; keeps the header filename in sync.
   const setDocName = (value: string) => {
@@ -193,7 +233,7 @@ export default function App() {
   };
 
   const newDoc = () => {
-    setSource(DEFAULT_SOURCE);
+    applySource(DEFAULT_SOURCE, true);
     setFileName(null);
     setActiveSection(null);
   };
@@ -254,13 +294,26 @@ export default function App() {
     };
     const onOver = (e: DragEvent) => e.preventDefault();
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      const target = e.target as HTMLElement;
+      const inInput = target && (target.tagName === "INPUT" || target.tagName === "SELECT");
+      const mod = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      if (mod && key === "s") {
         e.preventDefault();
         saveFh();
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") {
+      } else if (mod && key === "o") {
         e.preventDefault();
         fileRef.current?.click();
+      } else if (mod && (key === "y" || (key === "z" && e.shiftKey))) {
+        if (!inInput) {
+          e.preventDefault();
+          redo();
+        }
+      } else if (mod && key === "z") {
+        if (!inInput) {
+          e.preventDefault();
+          undo();
+        }
       }
     };
     window.addEventListener("dragover", onOver);
@@ -271,8 +324,7 @@ export default function App() {
       window.removeEventListener("drop", onDrop);
       window.removeEventListener("keydown", onKey);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handleOpenFile, doc]);
+  }, [handleOpenFile, saveFh, undo, redo]);
 
   const stats = countNodes(resolved.tree);
   const errors = parsed.issues.filter((i) => i.severity === "error");
@@ -341,7 +393,7 @@ export default function App() {
             </div>
           </div>
           <div className="pane-body">
-            <CodePane source={source} onChange={setSource} />
+            <CodePane source={source} onChange={applySource} />
           </div>
           {parsed.issues.length > 0 && (
             <div className={`issue-banner ${errors.length ? "error" : "warning"}`}>

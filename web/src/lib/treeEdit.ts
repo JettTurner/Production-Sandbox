@@ -70,7 +70,7 @@ export function moveNode(root: FsNode[], dragId: string, targetId: string, posit
   const targetPath = findPath(root, targetId);
   if (!dragPath || !targetPath) return root;
 
-  const node = dragPath[0].node;
+  const node = dragPath[dragPath.length - 1].node;
 
   // Cannot drop a node into itself or its own descendant.
   if (position === "into") {
@@ -84,21 +84,20 @@ export function moveNode(root: FsNode[], dragId: string, targetId: string, posit
   const newTargetPath = findPath(next, targetId);
   if (!newTargetPath) return next;
 
-  const [target] = newTargetPath;
-  const insertInto = (container: FsNode[], index: number): FsNode[] => {
-    const arr = [...container];
-    arr.splice(Math.max(0, Math.min(index, arr.length)), 0, node);
-    return arr;
-  };
+  const target = newTargetPath[newTargetPath.length - 1];
 
   if (position === "into") {
-    return replaceChildren(next, newTargetPath, insertInto(target.node.children, target.node.children.length));
+    // Drop onto a folder -> becomes its last child (subtree travels with it).
+    return replaceChildren(next, newTargetPath, [...target.node.children, node]);
   }
 
-  let index = target.index + (position === "after" ? 1 : 0);
-  // If dragId was before target in the same container, the removal shifted the target left.
-  if (target.container === dragPath[0].container && dragPath[0].index < target.index) index -= 1;
-  return replaceChildren(next, newTargetPath, insertInto(target.container, index));
+  // Insert as a sibling, into the container that holds the target.
+  const parentPath = newTargetPath.slice(0, -1);
+  const container = target.container;
+  const arr = [...container];
+  arr.splice(Math.max(0, Math.min(target.index + (position === "after" ? 1 : 0), arr.length)), 0, node);
+  if (parentPath.length === 0) return arr;
+  return replaceChildren(next, parentPath, arr);
 }
 
 function replaceChildren(root: FsNode[], path: Located[], children: FsNode[]): FsNode[] {
