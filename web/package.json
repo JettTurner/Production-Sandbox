@@ -4,12 +4,29 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Visual designer + generator for .fh (folder hierarchy) files",
+  "author": "flybo",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "verify": "tsx scripts/verify.ts"
+    "verify": "tsx scripts/verify.ts",
+    "electron:preview": "npm run build && electron .",
+    "electron:package": "electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.flybo.folder-hierarchy-studio",
+    "productName": "Folder Hierarchy Studio",
+    "executableName": "FolderHierarchyStudio",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ]
   },
   "dependencies": {
     "jszip": "^3.10.1",
@@ -20,6 +37,8 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3",
     "tsx": "^4.23.12",
     "typescript": "~5.7.2",
     "vite": "^6.0.7"

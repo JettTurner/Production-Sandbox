@@ -167,7 +167,7 @@ export default function App() {
   // single source of truth; keep the built-in default if the fetch fails.
   useEffect(() => {
     let cancelled = false;
-    fetch("/samples/startup.fh")
+    fetch(`${import.meta.env.BASE_URL}samples/startup.fh`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.text();
@@ -260,7 +260,7 @@ export default function App() {
       return;
     }
     try {
-      const res = await fetch(`/samples/${value}.fh`);
+      const res = await fetch(`${import.meta.env.BASE_URL}samples/${value}.fh`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const text = await res.text();
       baselineRef.current = text;

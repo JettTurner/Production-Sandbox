@@ -10,6 +10,10 @@ dist/
 *.tsbuildinfo
 web/node_modules/.tmp/
 
+# --- Electron / installer output ---
+web/release/
+web/installer/Output/
+
 # --- Env / secrets ---
 .env
 .env.*

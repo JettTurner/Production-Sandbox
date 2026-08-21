@@ -51,18 +51,31 @@ re-serializes the document and re-parses it.
 /
 ├── AGENTS.md                  ← instructions for AI agents (read structure doc first)
 ├── README.md                  ← user-facing readme
+├── build.bat                  ← one-shot Electron build: verify → vite build →
+│                                electron-builder --dir → Inno Setup installer (.iss)
 ├── docs/
 │   └── structure.md           ← this document
 ├── pbkstruct_gui.py           ← LEGACY Python/tkinter tool (.pbkstruct era); reference only
 ├── _PBKSTRUCT/                ← LEGACY sample/reference .pbkstruct files; reference only
 └── web/                       ← THE APP (React + TypeScript + Vite)
     ├── index.html             ← Vite entry HTML
-    ├── package.json           ← scripts & deps (see Commands below)
-    ├── vite.config.ts         ← Vite config (react plugin, port 5173, auto-open)
+    ├── package.json           ← scripts & deps (see Commands below); also holds the
+    │                             electron-builder config ("build" field) and the Electron
+    │                             entry point ("main": electron/main.cjs)
+    ├── vite.config.ts         ← Vite config (react plugin, port 5173, auto-open,
+    │                             base "./" so the built app works under Electron's app:// scheme)
     ├── tsconfig.json          ← TS solution file (references app/node configs)
     ├── tsconfig.app.json      ← TS config for src/
     ├── tsconfig.node.json     ← TS config for vite.config.ts / scripts
     ├── preview.log            ← scratch logs (not part of the app)
+    ├── electron/
+    │   └── main.cjs           ← Electron main process: serves web/dist via a custom
+    │                             app:// protocol (fetch() doesn't work on file://), creates
+    │                             the BrowserWindow; VITE_DEV_SERVER_URL env switches to dev server
+    ├── installer/
+    │   └── folder-hierarchy-studio.iss  ← Inno Setup script consumed by build.bat;
+    │                             per-user install ({autopf} → %LocalAppData%\Programs),
+    │                             version injected via /DMyAppVersion, packaging input via /DAppSourceDir
     ├── public/
     │   ├── favicon.svg
     │   └── samples/           ← bundled example .fh files (Load-sample dropdown)
@@ -234,12 +247,35 @@ All accept an optional `style` prop (flex sizing from App).
 ## Commands (run inside `web/`)
 
 ```
-npm run dev        # Vite dev server on :5173 (auto-opens)
-npm run build      # tsc -b && vite build
-npm run preview    # serve the production build
-npm run typecheck  # tsc -b --noEmit
-npm run verify     # parser/resolver/treeEdit regression suite
+npm run dev               # Vite dev server on :5173 (auto-opens)
+npm run build             # tsc -b && vite build
+npm run preview           # serve the production build
+npm run typecheck         # tsc -b --noEmit
+npm run verify            # parser/resolver/treeEdit regression suite
+npm run electron:preview  # npm run build, then open dist/ in a plain Electron shell
+npm run electron:package  # electron-builder --dir (default output: web/release)
 ```
+
+## Desktop build (repo root)
+
+```
+build.bat                 # full pipeline → Windows installer via Inno Setup
+```
+
+`build.bat` runs: dependency install (first run) → `npm run verify` →
+`npm run build` → `electron-builder --dir` → `ISCC.exe` (Inno Setup 6,
+auto-located under Program Files or on PATH). Outputs:
+
+- **Installer**: `web/installer/Output/FolderHierarchyStudio-Setup-<version>.exe`
+  (version read from `web/package.json`, passed to the `.iss` as
+  `/DMyAppVersion`; per-user install, no UAC).
+- **Unpacked app**: `%LOCALAPPDATA%\fh-studio-build\win-unpacked\FolderHierarchyStudio.exe`.
+
+The packaging output deliberately lives **outside** the repo: OneDrive syncs
+the workspace and locks the large `win-unpacked` directory while
+electron-builder renames it, causing `EPERM`. The `.iss` receives the location
+via `/DAppSourceDir`. Requires Node.js and Inno Setup 6
+(https://jrsoftware.org/isdl.php).
 
 ## Conventions worth preserving
 
@@ -248,3 +284,6 @@ npm run verify     # parser/resolver/treeEdit regression suite
 - Dot-in-name means file; keep this rule consistent everywhere.
 - IDs are ephemeral: regenerate on parse, never serialize.
 - Single stylesheet (`index.css`); dark GitHub-ish palette with CSS variables.
+- Runtime fetches of bundled assets use `${import.meta.env.BASE_URL}`-relative
+  paths (not absolute `/...`) so they resolve in the browser, under Vite
+  preview, and inside Electron's `app://` scheme.
