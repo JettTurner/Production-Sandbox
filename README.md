@@ -119,4 +119,4 @@ web/
     └── App.tsx              # layout + state + actions
 ```
 
-The legacy desktop app lives on in `pbkstruct_gui.py` and the original definitions in `_PBKSTRUCT/` remain loadable.
+The legacy desktop app lives on in `pbkstruct_gui.py` (kept for reference).

@@ -56,7 +56,6 @@ re-serializes the document and re-parses it.
 ├── docs/
 │   └── structure.md           ← this document
 ├── pbkstruct_gui.py           ← LEGACY Python/tkinter tool (.pbkstruct era); reference only
-├── _PBKSTRUCT/                ← LEGACY sample/reference .pbkstruct files; reference only
 └── web/                       ← THE APP (React + TypeScript + Vite)
     ├── index.html             ← Vite entry HTML
     ├── package.json           ← scripts & deps (see Commands below); also holds the
@@ -70,14 +69,21 @@ re-serializes the document and re-parses it.
     ├── preview.log            ← scratch logs (not part of the app)
     ├── electron/
     │   └── main.cjs           ← Electron main process: serves web/dist via a custom
-    │                             app:// protocol (fetch() doesn't work on file://), creates
-    │                             the BrowserWindow; VITE_DEV_SERVER_URL env switches to dev server
+    │                             app:// protocol (fetch() doesn't work on file://); frameless
+    │                             window whose title bar IS the app header (titleBarStyle
+    │                             hidden + theme-colored titleBarOverlay); VITE_DEV_SERVER_URL
+    │                             env switches to the dev server
     ├── installer/
     │   └── folder-hierarchy-studio.iss  ← Inno Setup script consumed by build.bat;
     │                             per-user install ({autopf} → %LocalAppData%\Programs),
-    │                             version injected via /DMyAppVersion, packaging input via /DAppSourceDir
+    │                             version injected via /DMyAppVersion, packaging input via /DAppSourceDir,
+    │                             SetupIconFile from build/icon.ico
+    ├── build/
+    │   └── icon.ico           ← GENERATED (scripts/make-icon.mjs): multi-size ICO;
+    │                             auto-embedded into the exe by electron-builder
     ├── public/
-    │   ├── favicon.svg
+    │   ├── favicon.svg        ← source of truth for all app icons
+    │   ├── icon.png           ← GENERATED 256px PNG; BrowserWindow/taskbar icon via dist/
     │   └── samples/           ← bundled example .fh files (Load-sample dropdown)
     │       ├── startup.fh     ← loaded automatically on app boot
     │       ├── vizlab.fh
@@ -85,7 +91,8 @@ re-serializes the document and re-parses it.
     │       ├── project-structure.fh
     │       └── office-directory.fh
     ├── scripts/
-    │   └── verify.ts          ← headless parser/resolver/treeEdit regression suite
+    │   ├── verify.ts          ← headless parser/resolver/treeEdit regression suite
+    │   └── make-icon.mjs      ← favicon.svg → build/icon.ico + public/icon.png (npm run icons)
     └── src/
         ├── main.tsx           ← React bootstrap (mounts <App/> into #root)
         ├── App.tsx            ← application shell: state hub, layout, toolbar
@@ -263,8 +270,9 @@ build.bat                 # full pipeline → Windows installer via Inno Setup
 ```
 
 `build.bat` runs: dependency install (first run) → `npm run verify` →
-`npm run build` → `electron-builder --dir` → `ISCC.exe` (Inno Setup 6,
-auto-located under Program Files or on PATH). Outputs:
+`npm run build` → icon generation (`scripts/make-icon.mjs`) →
+`electron-builder --dir` → `ISCC.exe` (Inno Setup 6, auto-located under
+Program Files or on PATH). Outputs:
 
 - **Installer**: `web/installer/Output/FolderHierarchyStudio-Setup-<version>.exe`
   (version read from `web/package.json`, passed to the `.iss` as
@@ -287,3 +295,11 @@ via `/DAppSourceDir`. Requires Node.js and Inno Setup 6
 - Runtime fetches of bundled assets use `${import.meta.env.BASE_URL}`-relative
   paths (not absolute `/...`) so they resolve in the browser, under Vite
   preview, and inside Electron's `app://` scheme.
+- In Electron the app header doubles as the window title bar: `html.electron`
+  (set in `main.tsx` via UA sniffing) makes `.header` a drag region with
+  no-drag controls and right padding reserved for the native min/max/close
+  overlay; the overlay colors/height mirror `.header`'s CSS
+  (`TITLEBAR_*` constants in `electron/main.cjs`). Keep them in sync when
+  changing header padding/height or theme colors.
+- All desktop icons derive from `public/favicon.svg`; regenerate with
+  `npm run icons` after changing it.
