@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FsNode } from "../lib/types";
 import { makeFolder, makeInsert, moveNode, removeNode, insertChild } from "../lib/treeEdit";
-import { ChevronIcon, CopyIcon, FileIcon, FolderIcon, GripIcon, PlusIcon, XIcon } from "./icons";
+import { ChevronIcon, CopyIcon, FileIcon, FolderIcon, GripIcon, PlusChildIcon, PlusIcon, XIcon } from "./icons";
 
 export interface SectionRef {
   kind: "root" | "template";
@@ -27,8 +27,10 @@ interface EditState {
 }
 
 interface MenuState {
-  targetId: string | null;
   anchor: HTMLElement;
+  parentId: string | null;
+  index: number;
+  childOf: boolean;
 }
 
 type AddSpec =
@@ -59,25 +61,25 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
     setDropState(null);
   };
 
-  const openMenu = (targetId: string | null, e: React.MouseEvent<HTMLElement>) => {
+  const openMenu = (target: Omit<MenuState, "anchor">, e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation();
     const anchor = e.currentTarget;
     if (menu?.anchor === anchor) setMenu(null);
-    else setMenu({ targetId, anchor });
+    else setMenu({ ...target, anchor });
   };
 
-  const addNode = (parentId: string | null, spec: AddSpec) => {
+  const addNode = (parentId: string | null, index: number, spec: AddSpec) => {
     const node =
       spec.kind === "insert"
         ? makeInsert(spec.template)
         : makeFolder(spec.kind === "file" ? "Untitled.txt" : "New Folder");
     const parent = parentId ? findNode(nodes, parentId) : null;
     const siblings = parent ? parent.children : nodes;
-    const newTree = insertChild(nodes, parentId, siblings.length, node);
+    const newTree = insertChild(nodes, parentId, Math.min(Math.max(index, 0), siblings.length), node);
     onNodesChange(newTree);
     setMenu(null);
-    const path = pathOf(newTree, node.id);
-    setEditing(path ? { path, value: node.name } : null);
+    const newPath = pathOf(newTree, node.id);
+    setEditing(newPath ? { path: newPath, value: node.name } : null);
     if (parentId) setCollapsed((prev) => { const n = new Set(prev); n.delete(parentId); return n; });
   };
 
@@ -116,11 +118,14 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
     const insertable = node.kind === "folder";
     const dropTarget = dropState?.targetId === node.id ? dropState.position : null;
     const isEditing = editing ? pathsEqual(path, editing.path) : false;
+    const typeClass =
+      node.kind === "insert" ? "type-insert" : node.name.includes(".") ? "type-file" : "type-folder";
 
     return (
-      <div key={node.id} style={{ paddingLeft: depth * 20 }}>
+      <div key={node.id}>
         <div
           className={`tree-row ${dragId === node.id ? "dragging" : ""} ${dropTarget ? "droppable" : ""}`}
+          style={{ marginLeft: depth * 20 }}
           onDragOver={(e) => {
             e.preventDefault();
             e.dataTransfer.dropEffect = "move";
@@ -173,60 +178,76 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
             {node.kind === "folder" ? (node.name.includes(".") ? <FileIcon /> : <FolderIcon />) : <CopyIcon />}
           </span>
 
-          {node.kind === "insert" ? (
-            <span className="insert-picker">
-              <span className="name insert-name">@insert</span>
-              <select
-                value={node.name}
-                onChange={(e) => onNodesChange(updateName(nodes, node.id, e.target.value))}
-                onDragOver={(e) => e.stopPropagation()}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {templates.length ? (
-                  templates.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))
-                ) : (
-                  <option value={node.name}>{node.name}</option>
-                )}
-              </select>
-            </span>
-          ) : (
-            <NodeName
-              node={node}
-              editing={isEditing}
-              value={isEditing && editing ? editing.value : node.name}
-              onChange={(v) => setEditing({ path, value: v })}
-              onStart={() => setEditing({ path, value: node.name })}
-              onCommit={(name) => renameAt(path, name)}
-            />
-          )}
+          <span className="name-zone">
+            {node.kind === "insert" ? (
+              <span className="insert-picker">
+                <select
+                  value={node.name}
+                  onChange={(e) => onNodesChange(updateName(nodes, node.id, e.target.value))}
+                  onDragOver={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {templates.length ? (
+                    templates.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))
+                  ) : (
+                    <option value={node.name}>{node.name}</option>
+                  )}
+                </select>
+              </span>
+            ) : (
+              <NodeName
+                node={node}
+                editing={isEditing}
+                value={isEditing && editing ? editing.value : node.name}
+                onChange={(v) => setEditing({ path, value: v })}
+                onStart={() => setEditing({ path, value: node.name })}
+                onCommit={(name) => renameAt(path, name)}
+              />
+            )}
 
-          {node.kind === "folder" && (
-            <span className="count">
-              {children.length} {children.length === 1 ? "child" : "children"}
-            </span>
-          )}
-
-          <span className="hover-actions">
-            <IconButton title="Add folder, file, or structure" onClick={(e) => openMenu(node.id, e)}>
-              <PlusIcon />
-            </IconButton>
-            <IconButton title="Move up" onClick={() => moveAt(path, -1)}>
-              <ChevronIcon className="up" />
-            </IconButton>
-            <IconButton title="Move down" onClick={() => moveAt(path, 1)}>
-              <ChevronIcon className="down" />
-            </IconButton>
-            <IconButton title="Duplicate" onClick={() => duplicateAt(path, node)}>
-              <CopyIcon />
-            </IconButton>
-            <IconButton title="Delete" className="danger" onClick={() => deleteAt(path)}>
-              <XIcon />
-            </IconButton>
+            {node.kind === "folder" && (
+              <span className="count">
+                {children.length} {children.length === 1 ? "child" : "children"}
+              </span>
+            )}
           </span>
+
+          <span className={`hover-actions ${typeClass}`}>
+              <IconButton
+                title="Add after (same level)"
+                onClick={(e) =>
+                  openMenu(
+                    { parentId: parentIdAt(nodes, path), index: path[path.length - 1] + 1, childOf: false },
+                    e,
+                  )
+                }
+              >
+                <PlusIcon />
+              </IconButton>
+              <IconButton
+                title={insertable ? "Add child" : "@insert children come from the template"}
+                disabled={!insertable}
+                onClick={(e) => openMenu({ parentId: node.id, index: children.length, childOf: true }, e)}
+              >
+                <PlusChildIcon />
+              </IconButton>
+              <IconButton title="Move up" onClick={() => moveAt(path, -1)}>
+                <ChevronIcon className="up" />
+              </IconButton>
+              <IconButton title="Move down" onClick={() => moveAt(path, 1)}>
+                <ChevronIcon className="down" />
+              </IconButton>
+              <IconButton title="Duplicate" onClick={() => duplicateAt(path, node)}>
+                <CopyIcon />
+              </IconButton>
+              <IconButton title="Delete" className="danger" onClick={() => deleteAt(path)}>
+                <XIcon />
+              </IconButton>
+            </span>
         </div>
 
         {insertable && !isCollapsed && children.length > 0 && children.map((c, i) => renderNode(c, depth + 1, [...path, i]))}
@@ -235,7 +256,7 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
   };
 
   return (
-    <div className="designer-body">
+    <div className={`designer-body ${dragId ? "dragging-active" : ""}`}>
       {nodes.length === 0 ? (
         <div className="empty-hint">
           <div className="big">📁</div>
@@ -243,14 +264,20 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
             ? "Design the root structure — add folders, files, or reusable structures."
             : `Template "@${section.name}" is empty — add folders or insert another template.`}
           <div style={{ marginTop: 12, display: "flex", justifyContent: "center", gap: 6 }}>
-            <AddButton label="Add…" onClick={(e) => openMenu(null, e)} />
+            <AddButton
+              label="Add…"
+              onClick={(e) => openMenu({ parentId: null, index: nodes.length, childOf: false }, e)}
+            />
           </div>
         </div>
       ) : (
         <>
           {nodes.map((n, i) => renderNode(n, 0, [i]))}
           <div className="designer-footer">
-            <AddButton label="Add…" onClick={(e) => openMenu(null, e)} />
+            <AddButton
+              label="Add…"
+              onClick={(e) => openMenu({ parentId: null, index: nodes.length, childOf: false }, e)}
+            />
           </div>
         </>
       )}
@@ -258,9 +285,9 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
       {menu && (
         <PlusDropdown
           anchor={menu.anchor}
-          targetLabel={menu.targetId ? "child" : "top-level item"}
+          targetLabel={menu.childOf ? "child" : menu.parentId ? "sibling" : "top-level item"}
           templates={templates}
-          onAdd={(spec) => addNode(menu.targetId, spec)}
+          onAdd={(spec) => addNode(menu.parentId, menu.index, spec)}
           onClose={() => setMenu(null)}
         />
       )}
@@ -355,14 +382,22 @@ function IconButton({
   onClick,
   children,
   className,
+  disabled,
 }: {
   title: string;
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   children: React.ReactNode;
   className?: string;
+  disabled?: boolean;
 }) {
   return (
-    <button className={`icon-btn ${className ?? ""}`} title={title} onClick={onClick} onMouseDown={(e) => e.stopPropagation()}>
+    <button
+      className={`icon-btn ${className ?? ""}`}
+      title={title}
+      onClick={onClick}
+      onMouseDown={(e) => e.stopPropagation()}
+      disabled={disabled}
+    >
       {children}
     </button>
   );

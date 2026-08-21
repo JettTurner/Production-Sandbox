@@ -203,24 +203,48 @@ button {
   background: var(--red-weak);
   border-color: var(--red);
 }
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.icon-btn:disabled:hover {
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+}
 
+.filename-wrap {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.12s ease;
+}
+.filename-wrap:focus-within {
+  border-color: var(--accent);
+}
 .filename-input {
   font-size: 12px;
   color: var(--text);
   font-family: var(--mono);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 5px 10px;
-  width: 190px;
+  background: none;
+  border: none;
+  padding: 5px 2px 5px 10px;
+  width: 160px;
   outline: none;
-  transition: border-color 0.12s ease;
-}
-.filename-input:focus {
-  border-color: var(--accent);
 }
 .filename-input::placeholder {
   color: var(--muted);
+}
+/* Fixed extension chip — not editable, selectable, or deletable. */
+.filename-ext {
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--muted);
+  padding-right: 10px;
+  user-select: none;
+  pointer-events: none;
 }
 
 .name-input {
@@ -593,6 +617,7 @@ button {
 }
 
 .tree-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -685,10 +710,7 @@ button {
   border-color: var(--purple);
 }
 .tree-row .name {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: 0 0 auto;
   white-space: nowrap;
   cursor: default;
 }
@@ -699,11 +721,6 @@ button {
   padding: 0 4px;
   outline: none;
   color: var(--text);
-}
-.tree-row .insert-name {
-  font-family: var(--mono);
-  color: var(--purple);
-  font-size: 12.5px;
 }
 .tree-row .label {
   color: var(--muted);
@@ -721,22 +738,47 @@ button {
   padding: 1px 7px;
   white-space: nowrap;
 }
+/* Inline zone hugging the name (+ count); anchors the floating action bar. */
+.name-zone {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Second column of every row, pinned to the right edge: space is always
+   reserved so the controls line up vertically across all rows. */
 .tree-row .hover-actions {
+  margin-left: auto;
+  flex: 0 0 auto;
   display: inline-flex;
   gap: 2px;
-  margin-left: auto;
-  visibility: hidden;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-.tree-row:hover .hover-actions,
-.tree-row:focus-within .hover-actions {
-  visibility: visible;
-  opacity: 1;
 }
 .tree-row .hover-actions .icon-btn {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
+}
+/* Controls take on the row's node type color. */
+.tree-row .hover-actions.type-folder .icon-btn {
+  color: var(--accent);
+}
+.tree-row .hover-actions.type-file .icon-btn {
+  color: var(--green);
+}
+.tree-row .hover-actions.type-insert .icon-btn {
+  color: var(--purple);
+}
+.template-pane .tree-row .hover-actions.type-folder .icon-btn {
+  color: var(--purple);
+}
+/* Delete keeps its own identity: neutral at rest, red on hover. */
+.tree-row .hover-actions .icon-btn.danger {
+  color: var(--muted);
+}
+.tree-row .hover-actions .icon-btn.danger:hover {
+  color: var(--red);
+}
+.designer-body.dragging-active .tree-row .hover-actions {
+  display: none;
 }
 
 .insert-picker {
@@ -745,9 +787,9 @@ button {
   gap: 4px;
 }
 .insert-picker select {
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
+  background: rgba(188, 140, 255, 0.08);
+  color: var(--purple);
+  border: 1px solid rgba(188, 140, 255, 0.45);
   border-radius: var(--radius-sm);
   font-family: var(--mono);
   font-size: 12px;
@@ -755,8 +797,16 @@ button {
   outline: none;
   max-width: 170px;
 }
+.insert-picker select:hover,
 .insert-picker select:focus {
-  border-color: var(--accent);
+  border-color: var(--purple);
+}
+.insert-picker select:focus {
+  background: rgba(188, 140, 255, 0.12);
+}
+.insert-picker select option {
+  background: var(--bg-elev);
+  color: var(--text);
 }
 
 .empty-hint {
@@ -799,8 +849,7 @@ button {
 }
 .preview-node {
   display: flex;
-  align-items: flex-start;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   padding: 2px 6px;
   border-radius: var(--radius-sm);
@@ -823,7 +872,6 @@ button {
   padding: 0;
   border-radius: 4px;
   flex: 0 0 auto;
-  margin-top: 2px;
 }
 .preview-node .chev:hover {
   background: var(--bg-elev);
@@ -831,15 +879,10 @@ button {
 }
 .preview-node .node-icon {
   flex: 0 0 auto;
-  margin-top: 2px;
 }
 .preview-node .name {
-  flex: 1 1 0;
-  min-width: 0;
-  white-space: normal;
-  overflow: visible;
-  overflow-wrap: anywhere;
-  word-break: normal;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .preview-node .name.file {
   color: #79c0ff;
@@ -853,11 +896,6 @@ button {
   color: var(--muted);
   white-space: nowrap;
   flex: 0 0 auto;
-  margin-top: 2px;
-}
-.preview-node .badge.file {
-  color: var(--orange);
-  border-color: rgba(210, 153, 34, 0.4);
 }
 
 /* ---------- Templates panel ---------- */

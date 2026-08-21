@@ -36,6 +36,13 @@ const DEFAULT_SOURCE = `@version 1.0
 \t03_ReferenceFiles
 `;
 
+const BLANK_SOURCE = `@version 1.0
+@name Untitled Structure
+
+#---Root---
+@root
+`;
+
 const SAMPLES: { value: string; label: string }[] = [
   { value: "vizlab", label: "VizLab Production" },
   { value: "office-directory", label: "Office Directory" },
@@ -74,24 +81,46 @@ export default function App() {
   const baselineRef = useRef(DEFAULT_SOURCE);
 
   type PaneId = "source" | "templates" | "root" | "preview";
-  const MIN_COL = 140;
-  const MAX_COL = 900;
-  const [colPx, setColPx] = useState<Record<PaneId, number>>({
-    source: 320,
-    templates: 340,
-    root: 380,
+  const MIN_PCT = 10;
+  const MAX_PCT = 60;
+  const RESIZER_W = 12;
+  const mainRef = useRef<HTMLElement>(null);
+  const [colPct, setColPct] = useState<Record<PaneId, number>>({
+    source: 100 / 3,
+    templates: 100 / 3,
+    root: 100 / 3,
     preview: 0, // preview is flex-fill; not stored
   });
 
-  // Fixed-width panes are stored in px; the preview column flexes to fill the
-  // rest, so it always reaches the right edge of the screen.
+  // Columns are stored as percentages of the main row. Their default position
+  // is an even horizontal split, restored whenever the window is resized.
+  const evenSplit = useCallback(() => {
+    const el = mainRef.current;
+    const panes = (sourceOpen ? 1 : 0) + 3;
+    const resizers = (sourceOpen ? 3 : 2) * RESIZER_W;
+    const usablePct =
+      el && el.clientWidth > resizers + 24
+        ? ((el.clientWidth - resizers - 24) / el.clientWidth) * 100
+        : 100;
+    const share = usablePct / panes;
+    setColPct({ source: share, templates: share, root: share, preview: 0 });
+  }, [sourceOpen]);
+
+  useEffect(() => {
+    evenSplit();
+    window.addEventListener("resize", evenSplit);
+    return () => window.removeEventListener("resize", evenSplit);
+  }, [evenSplit]);
+
   const handleColumnResize = useCallback(
     (left: PaneId, right: PaneId) => (dx: number) => {
-      setColPx((prev) => {
-        const nextL = Math.min(MAX_COL, Math.max(MIN_COL, (prev[left] ?? 300) + dx));
-        const next: Record<PaneId, number> = { ...prev, [left]: nextL };
+      const width = mainRef.current?.clientWidth ?? window.innerWidth;
+      const dPct = (dx / width) * 100;
+      setColPct((prev) => {
+        const clamp = (v: number) => Math.min(MAX_PCT, Math.max(MIN_PCT, v));
+        const next: Record<PaneId, number> = { ...prev, [left]: clamp((prev[left] ?? 25) + dPct) };
         if (right !== "preview") {
-          next[right] = Math.min(MAX_COL, Math.max(MIN_COL, (prev[right] ?? 300) - dx));
+          next[right] = clamp((prev[right] ?? 25) - dPct);
         }
         return next;
       });
@@ -275,8 +304,8 @@ export default function App() {
 
   const newDoc = () => {
     if (!confirmDiscard()) return;
-    baselineRef.current = DEFAULT_SOURCE;
-    applySource(DEFAULT_SOURCE, true);
+    baselineRef.current = BLANK_SOURCE;
+    applySource(BLANK_SOURCE, true);
     setFileName(null);
     setActiveSection(null);
   };
@@ -327,6 +356,14 @@ export default function App() {
     if (activeSection === name) setActiveSection(null);
     notify(`Deleted template "${name}" and its @insert references.`);
   };
+
+  // Always keep a template selected when one exists (initial load, file open,
+  // or after deleting the active template) so the dropdown never sits empty.
+  useEffect(() => {
+    if ((!activeSection || !doc.templates[activeSection]) && doc.templateOrder.length > 0) {
+      setActiveSection(doc.templateOrder[0]);
+    }
+  }, [activeSection, doc.templateOrder, doc.templates]);
 
   // ---------------- Global drag & drop + shortcuts ----------------
   useEffect(() => {
@@ -394,14 +431,17 @@ export default function App() {
           Folder Heirarchy Studio
           <small>.fh</small>
         </div>
-        <input
-          className="filename-input"
-          value={fileName ?? `${doc.name}.fh`}
-          onChange={(e) => renameFile(e.target.value)}
-          title="Rename the .fh file (also updates the @name line)"
-          spellCheck={false}
-          placeholder="name.fh"
-        />
+        <div className="filename-wrap">
+          <input
+            className="filename-input"
+            value={(fileName ?? `${doc.name}.fh`).replace(/\.fh$/i, "")}
+            onChange={(e) => renameFile(e.target.value)}
+            title="Rename the .fh file (also updates the @name line)"
+            spellCheck={false}
+            placeholder="name"
+          />
+          <span className="filename-ext">.fh</span>
+        </div>
         <div className="spacer" />
         <div className="toolbar">
           <button
@@ -442,11 +482,11 @@ export default function App() {
         </div>
       </header>
 
-      <main className="main">
+      <main className="main" ref={mainRef}>
         {sourceOpen && (
           <>
             <SourcePane
-              style={{ flex: `0 0 ${colPx.source}px` }}
+              style={{ flex: `0 0 ${colPct.source}%` }}
               source={source}
               onChange={applySource}
               issues={parsed.issues}
@@ -456,7 +496,7 @@ export default function App() {
           </>
         )}
         <TemplatesPane
-          style={{ flex: `0 0 ${colPx.templates}px` }}
+          style={{ flex: `0 0 ${colPct.templates}%` }}
           templates={doc.templateOrder}
           active={activeSection}
           tree={activeSection ? doc.templates[activeSection] ?? [] : []}
@@ -468,7 +508,7 @@ export default function App() {
         />
         <ColumnResizer onResize={handleColumnResize("templates", "root")} />
         <RootDesignerPane
-          style={{ flex: `0 0 ${colPx.root}px` }}
+          style={{ flex: `0 0 ${colPct.root}%` }}
           name={doc.name}
           onNameChange={setDocName}
           tree={doc.root}

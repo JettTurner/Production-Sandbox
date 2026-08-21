@@ -95,7 +95,7 @@ console.log(`\n== behavior checks ==`);
     const r = resolveDoc(doc);
     check(r.errors.length === 0, "no recursion error");
     const names = flatten(r.tree).map((n) => n.name);
-    check(names.join(",") === "A,B,C", `insert expands in place (got: ${names.join(",")})`);
+    check(names.join(",") === "A,C", `insert deposits contents without wrapper folder (got: ${names.join(",")})`);
   }
 }
 {

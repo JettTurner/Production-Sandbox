@@ -12,8 +12,17 @@ export function resolveDoc(doc: FhDocument): ResolveResult {
 
 export function resolveTree(root: FsNode[], templates: Record<string, FsNode[]>): ResolveResult {
   const errors: string[] = [];
-  const tree = root.map((n) => resolveNode(n, templates, [], errors));
+  const tree = resolveNodes(root, templates, [], errors);
   return { tree, errors };
+}
+
+function resolveNodes(
+  nodes: FsNode[],
+  templates: Record<string, FsNode[]>,
+  stack: string[],
+  errors: string[],
+): FsNode[] {
+  return nodes.flatMap((n) => resolveNode(n, templates, stack, errors));
 }
 
 function resolveNode(
@@ -21,29 +30,31 @@ function resolveNode(
   templates: Record<string, FsNode[]>,
   stack: string[],
   errors: string[],
-): FsNode {
+): FsNode[] {
   if (node.kind === "insert") {
     const key = node.name;
     if (stack.includes(key)) {
       errors.push(`Circular @insert detected: ${[...stack, key].join(" -> ")}`);
-      return { id: newId(), kind: "insert", name: key, children: [] };
+      return [{ id: newId(), kind: "insert", name: key, children: [] }];
     }
     const template = templates[key];
     if (!template) {
       errors.push(`Template not found: "${key}"`);
-      return { id: newId(), kind: "insert", name: key, children: [] };
+      return [{ id: newId(), kind: "insert", name: key, children: [] }];
     }
-    const next = [...stack, key];
-    return { id: newId(), kind: "folder", name: key, children: template.map((c) => resolveNode(c, templates, next, errors)) };
+    // Deposit the template's contents in place — no wrapper folder.
+    return resolveNodes(template, templates, [...stack, key], errors);
   }
 
-  return {
-    id: newId(),
-    kind: "folder",
-    name: node.name,
-    label: node.label,
-    children: node.children.map((c) => resolveNode(c, templates, stack, errors)),
-  };
+  return [
+    {
+      id: newId(),
+      kind: "folder",
+      name: node.name,
+      label: node.label,
+      children: resolveNodes(node.children, templates, stack, errors),
+    },
+  ];
 }
 
 /** Stats used by the preview header. */
