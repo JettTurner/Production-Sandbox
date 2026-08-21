@@ -103,19 +103,16 @@ html.electron .header a {
   letter-spacing: 0.2px;
   white-space: nowrap;
 }
+/* Brand mark fills its box; the artwork carries its own background tile. */
 .brand .logo {
   width: 26px;
   height: 26px;
-  border-radius: 7px;
-  background: linear-gradient(135deg, var(--accent), #1158c7);
   display: grid;
   place-items: center;
-  color: #fff;
-  font-size: 13px;
 }
 .brand .logo svg {
-  width: 16px;
-  height: 16px;
+  width: 100%;
+  height: 100%;
 }
 .brand small {
   color: var(--muted);

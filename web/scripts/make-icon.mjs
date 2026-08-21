@@ -1,4 +1,5 @@
-// Generates the desktop icons from the app's own artwork (public/favicon.svg):
+// Generates the desktop icons from the app's own artwork
+// (public/Production-Sandbox_Icon.svg):
 //   web/build/icon.ico  — multi-size ICO embedded into the exe by
 //                         electron-builder (auto-detected in build/) and used
 //                         as SetupIconFile by the Inno Setup script
@@ -11,7 +12,7 @@ import { Resvg } from "@resvg/resvg-js";
 import pngToIco from "png-to-ico";
 
 const root = new URL("../", import.meta.url);
-const svg = readFileSync(new URL("public/favicon.svg", root), "utf8");
+const svg = readFileSync(new URL("public/Production-Sandbox_Icon.svg", root), "utf8");
 const sizes = [16, 24, 32, 48, 64, 128, 256];
 
 const pngs = sizes.map((size) => ({

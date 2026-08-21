@@ -37,7 +37,7 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 ; Same icon electron-builder embeds into the exe (generated from
-; public/favicon.svg by scripts/make-icon.mjs).
+; public/Production-Sandbox_Icon.svg by scripts/make-icon.mjs).
 SetupIconFile=..\build\icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 

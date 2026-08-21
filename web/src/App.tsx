@@ -5,6 +5,7 @@ import RootDesignerPane from "./components/panes/RootDesignerPane";
 import SourcePane from "./components/panes/SourcePane";
 import TemplatesPane from "./components/panes/TemplatesPane";
 import {
+  BrandMarkIcon,
   CodeIcon,
   CopyIcon,
   DownloadIcon,
@@ -452,7 +453,7 @@ export default function App() {
       <header className="header">
         <div className="brand">
           <span className="logo">
-            <FolderArrowIcon />
+            <BrandMarkIcon />
           </span>
           Folder Heirarchy Studio
           <small>.fh</small>

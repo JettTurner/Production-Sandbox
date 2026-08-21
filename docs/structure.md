@@ -82,7 +82,8 @@ re-serializes the document and re-parses it.
     │   └── icon.ico           ← GENERATED (scripts/make-icon.mjs): multi-size ICO;
     │                             auto-embedded into the exe by electron-builder
     ├── public/
-    │   ├── favicon.svg        ← source of truth for all app icons
+    │   ├── Production-Sandbox_Icon.svg ← source of truth for all app icons
+    │   ├── Production-Sandbox_Icon.ai/.png ← raw design assets (also copied into dist)
     │   ├── icon.png           ← GENERATED 256px PNG; BrowserWindow/taskbar icon via dist/
     │   └── samples/           ← bundled example .fh files (Load-sample dropdown)
     │       ├── startup.fh     ← loaded automatically on app boot
@@ -92,7 +93,7 @@ re-serializes the document and re-parses it.
     │       └── office-directory.fh
     ├── scripts/
     │   ├── verify.ts          ← headless parser/resolver/treeEdit regression suite
-    │   └── make-icon.mjs      ← favicon.svg → build/icon.ico + public/icon.png (npm run icons)
+    │   └── make-icon.mjs      ← Production-Sandbox_Icon.svg → build/icon.ico + public/icon.png (npm run icons)
     └── src/
         ├── main.tsx           ← React bootstrap (mounts <App/> into #root)
         ├── App.tsx            ← application shell: state hub, layout, toolbar
@@ -301,5 +302,6 @@ via `/DAppSourceDir`. Requires Node.js and Inno Setup 6
   overlay; the overlay colors/height mirror `.header`'s CSS
   (`TITLEBAR_*` constants in `electron/main.cjs`). Keep them in sync when
   changing header padding/height or theme colors.
-- All desktop icons derive from `public/favicon.svg`; regenerate with
-  `npm run icons` after changing it.
+- All desktop icons derive from `public/Production-Sandbox_Icon.svg`; regenerate
+  with `npm run icons` after changing it. The header brand mark is inlined as
+  `BrandMarkIcon` (`src/components/icons.tsx`) — update it alongside the SVG.
