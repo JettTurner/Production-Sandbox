@@ -78,6 +78,22 @@ button {
   flex-wrap: wrap;
 }
 
+/* In the Electron desktop app the header IS the title bar: drag to move the
+   window, double-click to maximize/restore (handled by the OS). Interactive
+   controls opt out; the right padding clears the native min/max/close
+   overlay drawn by Windows (titleBarOverlay in electron/main.cjs). */
+html.electron .header {
+  -webkit-app-region: drag;
+  padding-right: 150px;
+}
+html.electron .header button,
+html.electron .header input,
+html.electron .header select,
+html.electron .header .filename-wrap,
+html.electron .header a {
+  -webkit-app-region: no-drag;
+}
+
 .brand {
   display: flex;
   align-items: center;

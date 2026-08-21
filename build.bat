@@ -29,23 +29,27 @@ if errorlevel 1 (
 cd /d "%WEB%"
 
 if not exist node_modules (
-    echo [1/5] Installing dependencies...
+    echo [1/6] Installing dependencies...
     call npm ci
     if errorlevel 1 call npm install
     if errorlevel 1 exit /b 1
 ) else (
-    echo [1/5] Dependencies already installed - skipping.
+    echo [1/6] Dependencies already installed - skipping.
 )
 
-echo [2/5] Running regression suite...
+echo [2/6] Running regression suite...
 call npm run verify
 if errorlevel 1 exit /b 1
 
-echo [3/5] Typechecking and building renderer...
+echo [3/6] Typechecking and building renderer...
 call npm run build
 if errorlevel 1 exit /b 1
 
-echo [4/5] Packaging Electron app ^(electron-builder --dir^)...
+echo [4/6] Generating app icons from favicon.svg...
+call node scripts\make-icon.mjs
+if errorlevel 1 exit /b 1
+
+echo [5/6] Packaging Electron app ^(electron-builder --dir^)...
 if exist "%BUILD_OUT%" rmdir /s /q "%BUILD_OUT%"
 call npx electron-builder --dir -c.directories.output="%BUILD_OUT%"
 if errorlevel 1 exit /b 1
@@ -70,7 +74,7 @@ if not defined ISCC (
 
 for /f "usebackq delims=" %%V in (`node -p "require('./package.json').version"`) do set "APPVER=%%V"
 
-echo [5/5] Building installer v%APPVER% with Inno Setup...
+echo [6/6] Building installer v%APPVER% with Inno Setup...
 "%ISCC%" /DMyAppVersion=%APPVER% /DAppSourceDir="%BUILD_OUT%\win-unpacked" installer\folder-hierarchy-studio.iss
 if errorlevel 1 exit /b 1
 
