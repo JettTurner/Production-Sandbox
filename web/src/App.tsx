@@ -20,6 +20,8 @@ import { createOnDisk, supportsFsAccess } from "./lib/folders";
 import { removeTemplateRefs, renameTemplateInTree } from "./lib/treeEdit";
 import type { FhDocument, FsNode } from "./lib/types";
 
+// First-paint + offline fallback; the real startup content is fetched from
+// /samples/startup.fh in the effect below.
 const DEFAULT_SOURCE = `@version 1.0
 @name Untitled Structure
 
@@ -160,6 +162,29 @@ export default function App() {
     sourceRef.current = next;
     setSource(next);
   }, []);
+
+  // On boot, load the startup sample from /samples so the shipped file is the
+  // single source of truth; keep the built-in default if the fetch fails.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/samples/startup.fh")
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.text();
+      })
+      .then((text) => {
+        if (cancelled) return;
+        baselineRef.current = text;
+        applySource(text, true);
+        setFileName("startup.fh");
+      })
+      .catch(() => {
+        /* fetch failed — stay on the built-in default */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [applySource]);
 
   const undo = useCallback(() => {
     const prev = pastRef.current[pastRef.current.length - 1];
