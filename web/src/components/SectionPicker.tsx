@@ -56,13 +56,17 @@ export default function SectionPicker({
           value={active ?? ""}
           onChange={(e) => onSelect(e.target.value || null)}
           title="Edit a template"
+          disabled={templates.length === 0}
         >
-          <option value="">Template…</option>
-          {templates.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
+          {templates.length === 0 ? (
+            <option value="">Create a template first</option>
+          ) : (
+            templates.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))
+          )}
         </select>
       )}
 

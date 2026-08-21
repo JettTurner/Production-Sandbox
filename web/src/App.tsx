@@ -530,7 +530,7 @@ export default function App() {
           {errors.length} error{errors.length === 1 ? "" : "s"} · {warnings.length} warning{warnings.length === 1 ? "" : "s"}
         </span>
         <span>File System Access: {supportsFsAccess() ? "available" : "not available"}</span>
-        <span style={{ marginLeft: "auto" }}>Drop a .fh / .pbkstruct file anywhere to open</span>
+        <span style={{ marginLeft: "auto" }}>Drop a .fh file anywhere to open</span>
       </footer>
 
       <div className="toasts">
