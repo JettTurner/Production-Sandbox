@@ -66,6 +66,7 @@ re-serializes the document and re-parses it.
     ├── public/
     │   ├── favicon.svg
     │   └── samples/           ← bundled example .fh files (Load-sample dropdown)
+    │       ├── startup.fh     ← same content as the app's DEFAULT_SOURCE
     │       ├── vizlab.fh
     │       ├── example.fh
     │       ├── project-structure.fh

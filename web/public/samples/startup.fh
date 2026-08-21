@@ -1,0 +1,14 @@
+@version 1.0
+@name Untitled Structure
+
+#---Root---
+@root
+ProjectName
+	@insert PROJECT
+
+#---Templates---
+@template PROJECT
+	00_ProgressImages
+	01_Deliverables
+	02_Links
+	03_ReferenceFiles

@@ -44,6 +44,7 @@ const BLANK_SOURCE = `@version 1.0
 `;
 
 const SAMPLES: { value: string; label: string }[] = [
+  { value: "startup", label: "Startup / Default" },
   { value: "vizlab", label: "VizLab Production" },
   { value: "office-directory", label: "Office Directory" },
   { value: "project-structure", label: "PBK Project Structure" },
