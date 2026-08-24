@@ -1,22 +1,27 @@
 import { useState } from "react";
 import { PencilIcon, PlusIcon, XIcon } from "./icons";
+import ColorPicker from "./ColorPicker";
 
 interface SectionPickerProps {
   templates: string[];
   active: string | null;
+  templateColors: Record<string, string>;
   onSelect: (name: string | null) => void;
   onAdd: (name: string) => void;
   onRename: (oldName: string, newName: string) => void;
   onDelete: (name: string) => void;
+  onSetTemplateColor: (name: string, color: string) => void;
 }
 
 export default function SectionPicker({
   templates,
   active,
+  templateColors,
   onSelect,
   onAdd,
   onRename,
   onDelete,
+  onSetTemplateColor,
 }: SectionPickerProps) {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -34,6 +39,8 @@ export default function SectionPicker({
     if (renaming) onRename(renaming, editName.trim());
     setRenaming(null);
   };
+
+  const activeColor = active ? templateColors[active] : undefined;
 
   return (
     <div className="design-tools">
@@ -72,6 +79,10 @@ export default function SectionPicker({
 
       {active && !renaming && (
         <>
+          <ColorPicker
+            value={activeColor ?? "#bc8cff"}
+            onChange={(c) => onSetTemplateColor(active, c)}
+          />
           <button
             className="icon-btn"
             title="Rename template"

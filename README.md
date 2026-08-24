@@ -81,8 +81,8 @@ A `.fh` file defines a hierarchy with **tab indentation** (4-space indentation i
 | --- | --- |
 | `@version 1.0` | Format version (informational) |
 | `@name <name>` | Document name (informational) |
-| `@root` | Starts the top-level structure |
-| `@template <NAME>` | Starts a reusable, named subtree |
+| `@root [#hex]` | Starts the top-level structure; optional GUI display color |
+| `@template <NAME> [#hex]` | Starts a reusable, named subtree; optional GUI display color |
 | `@insert <NAME>` | Expands a template in place |
 
 ### Node syntax
@@ -93,6 +93,7 @@ README.md      # treated as a file (name contains a dot)
 ```
 
 - **Comments** start with `#` and are ignored (whole line).
+- **Colors**: a trailing `#hex` on `@root` or `@template NAME` (e.g. `@template PROJECT #ffa657`) sets a GUI-only display color; it never reaches disk.
 - **Templates** may insert other templates. Nested inserts are fully supported.
 - **Circular inserts** (`A -> B -> A`) are detected and reported as errors.
 - **Missing templates** are reported as errors.

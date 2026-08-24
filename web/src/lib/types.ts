@@ -17,6 +17,7 @@ export interface FhDocument {
   root: FsNode[];
   templates: Record<string, FsNode[]>;
   templateOrder: string[];
+  templateColors: Record<string, string>;
 }
 
 export interface ParseIssue {

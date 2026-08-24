@@ -7,10 +7,12 @@ interface TemplatesPaneProps {
   templates: string[];
   active: string | null;
   tree: FsNode[];
+  templateColors: Record<string, string>;
   onSelect: (name: string | null) => void;
   onAdd: (name: string) => void;
   onRename: (oldName: string, newName: string) => void;
   onDelete: (name: string) => void;
+  onSetTemplateColor: (name: string, color: string) => void;
   onNodesChange: (nodes: FsNode[]) => void;
   style?: CSSProperties;
   className?: string;
@@ -20,10 +22,12 @@ export default function TemplatesPane({
   templates,
   active,
   tree,
+  templateColors,
   onSelect,
   onAdd,
   onRename,
   onDelete,
+  onSetTemplateColor,
   onNodesChange,
   style,
   className,
@@ -39,10 +43,12 @@ export default function TemplatesPane({
       <SectionPicker
         templates={templates}
         active={active}
+        templateColors={templateColors}
         onSelect={onSelect}
         onAdd={onAdd}
         onRename={onRename}
         onDelete={onDelete}
+        onSetTemplateColor={onSetTemplateColor}
       />
       <div className="pane-body">
         {active ? (

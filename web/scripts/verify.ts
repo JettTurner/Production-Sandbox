@@ -135,6 +135,39 @@ console.log(`\n== behavior checks ==`);
   }
 }
 {
+  // inline colors on @root / @template should be parsed and round-trip
+  const src = `@version 1.0\n@name Test\n\n#---Root---\n@root #ff0000\nA\n\tB\n\t@insert T\n\n#---Templates---\n@template T #00ff00\n\tC "cee"\n`;
+  const { doc } = parseFh(src);
+  check(!!doc, "inline-color fixture parses");
+  if (doc) {
+    check(doc.templateColors["@root"] === "#ff0000", "root inline color parsed");
+    check(doc.templateColors["T"] === "#00ff00", "template inline color parsed");
+    const out = serializeFh(doc);
+    check(out.includes("@root #ff0000"), "root color serialized inline");
+    check(out.includes("@template T #00ff00"), "template color serialized inline");
+    check(!out.includes("@template-color"), "no legacy @template-color emitted");
+    const re = parseFh(out);
+    check(!!re.doc, "inline-color round-trip parses");
+    if (re.doc) {
+      check(re.doc.templateColors["@root"] === "#ff0000", "root color round-trips");
+      check(re.doc.templateColors["T"] === "#00ff00", "template color round-trips");
+      check(re.issues.length === 0, "round-trip has no issues");
+    }
+  }
+}
+{
+  // legacy @template-color lines are rejected with a warning
+  const src = `@root\nA\n@template-color @root #ff0000\nB\n\n@template T\n@template-color T #00ff00\n\tC\n`;
+  const { doc, issues } = parseFh(src);
+  const warns = issues.filter((i) => i.message.includes("@template-color"));
+  check(warns.length === 2, "legacy @template-color warns twice");
+  if (doc) {
+    check(!doc.templateColors["@root"], "legacy root color ignored");
+    check(!doc.templateColors["T"], "legacy template color ignored");
+    check(Object.keys(doc.templates).length === 1 && !!doc.templates["T"], "no bogus template from @template-color");
+  }
+}
+{
   // ---- moveNode must move a folder together with its subtree ----
   const { doc } = parseFh(`@root\nA\n\tA1\n\tA2\nB\n\tB1\nC\n`);
   check(!!doc, "move fixture parses");

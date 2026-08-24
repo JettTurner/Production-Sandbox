@@ -20,15 +20,15 @@ A `.fh` file describes a folder/file skeleton:
 @name My Structure
 
 #---Root---
-@root
+@root #79c0ff
 src
 	main.tsx
 	components
 		Button.tsx
 
 #---Templates---
-@template react-component
-	index.tsx
+@template react-component #ffa657
+@index.tsx
 	styles.css
 ```
 
@@ -37,6 +37,9 @@ src
 - `NAME "Label"` attaches a GUI-only display label (never written to disk).
 - `@template X` sections define reusable structures; `@insert X` lines deposit a
   template's contents **in place** (no wrapper folder) at resolve time.
+- A trailing `#hex` on `@root` or `@template NAME` (e.g. `@template X #ffa657`)
+  assigns a GUI-only display color. The legacy separate-line `@template-color`
+  directive was removed and now produces a warning.
 - The app resolves `@insert`s into a final tree, previews it, and can export it
   as a `.zip` or create it on disk (File System Access API).
 
@@ -123,9 +126,10 @@ Owns all shared state and wires the four column panes together.
 - **Keyboard**: Ctrl+S save, Ctrl+O open, Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y
   redo (skipped when focus is in INPUT/SELECT), beforeunload guard +
   `confirmDiscard()` gates on new/open/sample.
-- **Layout**: header (filename input with fixed `.fh` chip, source toggle,
+- **Layout**: header (filename input with fixed `.fh` chip, templates button,
   samples, save/zip/copy/disk buttons) → `<main>` with resizable columns:
-  optional Source sidebar | Templates pane | Root Designer pane | Preview pane.
+  optional Source sidebar | Root Designer pane | Preview pane.
+  Templates open as a modal dialog (`TemplatesModal`).
   `ColumnResizer` handles sit between columns; last column flex-fills to the
   screen edge.
 - Auto-selects the first template whenever the active template is missing.
@@ -135,7 +139,8 @@ Owns all shared state and wires the four column panes together.
 - `FsNode` — `{ id, kind: "folder" | "insert", name, label?, children }`.
   Files are folders whose name contains a dot. `id` is regenerated on every
   parse (never persist it).
-- `FhDocument` — `{ version, name, root: FsNode[], templates, templateOrder }`.
+- `FhDocument` — `{ version, name, root: FsNode[], templates, templateOrder, templateColors }`.
+  `templateColors` maps template names to hex display colors (GUI only).
 - `ParseIssue` / `ParseResult` — diagnostics with line numbers.
 - `isFileLike(name)` — dot test used everywhere for folder-vs-file.
 - `newId()` — random id generator.
@@ -143,16 +148,16 @@ Owns all shared state and wires the four column panes together.
 ### `web/src/lib/parser.ts` — `.fh` text → `FhDocument`
 
 - Accepts tabs or 4-space indentation (mixed allowed); skips blank lines and
-  `#` comments; understands `@version`, `@name`, `@root`, `@template X`,
-  `@insert X`, trailing `"Label"` annotations.
+  `#` comments; understands `@version`, `@name`, `@root [#hex]`, `@template X
+  [#hex]`, `@insert X`, trailing `"Label"` annotations.
 - Produces `ParseResult { doc, issues }` with line-numbered errors/warnings;
   `doc` is null only when the file has no usable content.
 
 ### `web/src/lib/serializer.ts` — `FhDocument` → `.fh` text
 
-- `serializeFh(doc)` writes `@version`, `@name`, `#---Root---`/`@root`,
-  then each `@template` in `templateOrder` order; tabs for indent; labels
-  quoted; trailing blank lines trimmed.
+- `serializeFh(doc)` writes `@version`, `@name`, `#---Root---`/`@root [#hex]`,
+  then each `@template X [#hex]` in `templateOrder` order; tabs for indent;
+  labels quoted; trailing blank lines trimmed.
 
 ### `web/src/lib/resolver.ts` — resolves templates into the final tree
 
@@ -190,19 +195,25 @@ All return new trees; never mutate.
 
 ### `web/src/components/Designer.tsx` — interactive tree editor (shared)
 
-Used by both the Root Designer and Templates panes.
+Used by both the Root Designer and Templates modal.
 
 - Recursive rows: chevron, drag handle, type icon, name zone (name + child
   count), always-visible control column pinned right, colored by node type
   (blue folder / green file / purple insert; delete neutral→red on hover).
 - Controls: add sibling (`+`), add child (plus-under-line icon; disabled on
-  `@insert` rows), move up/down, duplicate, delete.
+  `@insert` rows), move up/down, duplicate, delete, expand/collapse template
+  (for `@insert` nodes when `onToggleInsert` is provided).
 - Drag & drop with before/after/into drop zones (delegates to
   `treeEdit.moveNode`); controls hidden while dragging.
 - Double-click name to rename inline (Enter commits, Escape cancels).
 - `PlusDropdown` portal menu: Add Folder / File / Insert structure (lists
   templates). `AddSpec` describes what to insert where.
 - New nodes enter rename mode automatically.
+- **Inline template expansion**: when `templateMap`, `expandedInserts`, and
+  `onToggleInsert` are provided, double-clicking an `@insert` row expands its
+  template contents inline with purple styling. Template edits call
+  `onTemplateNodesChange(templateName, newNodes)`. Insert rows are colored by
+  their template's color from `templateColors`.
 
 ### `web/src/components/Preview.tsx` — resolved-tree viewer
 
@@ -215,13 +226,19 @@ Used by both the Root Designer and Templates panes.
 ### `web/src/components/CodePane.tsx` — raw source editor
 
 - Textarea over a syntax-highlight backdrop (directives, labels, comments,
-  insert/template names), line-number gutter synced to scroll.
+  insert/template names, `#hex` colors), line-number gutter synced to scroll.
 - Tab inserts tab (Shift+Tab outdents, multi-line aware); Enter auto-indents.
 
-### `web/src/components/SectionPicker.tsx` — templates-pane header tools
+### `web/src/components/SectionPicker.tsx` — templates modal header tools
 
 - Template chooser dropdown, rename (pencil) / delete (×) for the active
   template, "+ Template" inline creator input.
+
+### `web/src/components/TemplatesModal.tsx` — templates modal dialog
+
+- Full-screen modal overlay containing SectionPicker + Designer for the active
+  template. Opened from the header "Templates" button. Closes on Escape or
+  backdrop click. Purple-themed header.
 
 ### `web/src/components/ColumnResizer.tsx` — drag handle between columns
 
@@ -237,8 +254,7 @@ X, Copy, Download, Upload, FolderArrow, Sparkle, Eraser, Pencil, Code.
 | Pane | Wraps | Notes |
 |---|---|---|
 | `SourcePane.tsx` | CodePane + issue list | collapsible sidebar, closed by default |
-| `TemplatesPane.tsx` | SectionPicker + Designer | purple theme (`template-pane`) |
-| `RootDesignerPane.tsx` | name input + Designer | edits `@name` + root tree |
+| `RootDesignerPane.tsx` | name input + Designer + source toggle | edits `@name` + root tree; inline template expansion via expand button on `@insert` rows |
 | `PreviewPane.tsx` | stats header + Preview | folders/files/total counts |
 
 All accept an optional `style` prop (flex sizing from App).

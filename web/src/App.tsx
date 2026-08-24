@@ -3,10 +3,9 @@ import ColumnResizer from "./components/ColumnResizer";
 import PreviewPane from "./components/panes/PreviewPane";
 import RootDesignerPane from "./components/panes/RootDesignerPane";
 import SourcePane from "./components/panes/SourcePane";
-import TemplatesPane from "./components/panes/TemplatesPane";
+import TemplatesModal from "./components/TemplatesModal";
 import {
   BrandMarkIcon,
-  CodeIcon,
   CopyIcon,
   DownloadIcon,
   FolderArrowIcon,
@@ -71,6 +70,7 @@ function emptyDoc(source: string): FhDocument {
       root: [],
       templates: {},
       templateOrder: [],
+      templateColors: {},
     }
   );
 }
@@ -82,34 +82,44 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [sample, setSample] = useState("");
   const [sourceOpen, setSourceOpen] = useState(false);
-  const [mobileTab, setMobileTab] = useState<"source" | "templates" | "root" | "preview">("root");
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"source" | "root" | "preview">("root");
   const fileRef = useRef<HTMLInputElement>(null);
   const baselineRef = useRef(DEFAULT_SOURCE);
 
-  type PaneId = "source" | "templates" | "root" | "preview";
+  // Keep the mobile tab bar in sync when the source editor is toggled from
+  // inside the root designer: opening reveals the Source tab, closing while
+  // it's active falls back to Root so a pane is always visible.
+  const toggleSource = useCallback(() => {
+    setSourceOpen((v) => {
+      if (!v) setMobileTab("source");
+      else setMobileTab((t) => (t === "source" ? "root" : t));
+      return !v;
+    });
+  }, []);
+
+  type PaneId = "source" | "root" | "preview";
   const MIN_PCT = 10;
   const MAX_PCT = 60;
   const RESIZER_W = 12;
   const mainRef = useRef<HTMLElement>(null);
   const [colPct, setColPct] = useState<Record<PaneId, number>>({
-    source: 100 / 3,
-    templates: 100 / 3,
-    root: 100 / 3,
+    source: 0,
+    root: 50,
     preview: 0, // preview is flex-fill; not stored
   });
 
-  // Columns are stored as percentages of the main row. Their default position
-  // is an even horizontal split, restored whenever the window is resized.
+  // Root and Preview always split the usable space 50/50. Source is an
+  // optional sidebar that steals its share equally from both.
   const evenSplit = useCallback(() => {
     const el = mainRef.current;
-    const panes = (sourceOpen ? 1 : 0) + 3;
-    const resizers = (sourceOpen ? 3 : 2) * RESIZER_W;
-    const usablePct =
-      el && el.clientWidth > resizers + 24
-        ? ((el.clientWidth - resizers - 24) / el.clientWidth) * 100
-        : 100;
-    const share = usablePct / panes;
-    setColPct({ source: share, templates: share, root: share, preview: 0 });
+    const sourceResizers = sourceOpen ? RESIZER_W : 0;
+    const usablePx = el && el.clientWidth > sourceResizers + 24
+      ? el.clientWidth - sourceResizers - 24
+      : (el?.clientWidth ?? window.innerWidth);
+    const usablePct = (usablePx / (el?.clientWidth ?? usablePx)) * 100;
+    const rootPct = sourceOpen ? usablePct / 4 : usablePct / 2;
+    setColPct({ source: sourceOpen ? rootPct : 0, root: rootPct, preview: 0 });
   }, [sourceOpen]);
 
   useEffect(() => {
@@ -124,9 +134,9 @@ export default function App() {
       const dPct = (dx / width) * 100;
       setColPct((prev) => {
         const clamp = (v: number) => Math.min(MAX_PCT, Math.max(MIN_PCT, v));
-        const next: Record<PaneId, number> = { ...prev, [left]: clamp((prev[left] ?? 25) + dPct) };
+        const next: Record<PaneId, number> = { ...prev, [left]: clamp((prev[left] ?? 50) + dPct) };
         if (right !== "preview") {
-          next[right] = clamp((prev[right] ?? 25) - dPct);
+          next[right] = clamp((prev[right] ?? 50) - dPct);
         }
         return next;
       });
@@ -207,9 +217,15 @@ export default function App() {
     setSource(next);
   }, []);
 
+  // Serializes a document derived from the FRESHEST source (sourceRef.current),
+  // not the render-time snapshot. Several designer flows fire multiple commits
+  // in one tick (e.g. "New template…" adds the template section and inserts an
+  // @insert row); building each commit from the previous source keeps them
+  // from overwriting one another.
   const commitDoc = useCallback(
-    (next: FhDocument) => {
-      applySource(serializeFh(next), true);
+    (update: (d: FhDocument) => FhDocument) => {
+      const current = emptyDoc(sourceRef.current);
+      applySource(serializeFh(update(current)), true);
     },
     [applySource],
   );
@@ -218,17 +234,24 @@ export default function App() {
 
   const handleRootChange = useCallback(
     (nodes: FsNode[]) => {
-      commitDoc({ ...doc, root: nodes });
+      commitDoc((d) => ({ ...d, root: nodes }));
     },
-    [doc, commitDoc],
+    [commitDoc],
   );
 
   const handleTemplateChange = useCallback(
     (nodes: FsNode[]) => {
       if (!activeSection) return;
-      commitDoc({ ...doc, templates: { ...doc.templates, [activeSection]: nodes } });
+      commitDoc((d) => ({ ...d, templates: { ...d.templates, [activeSection]: nodes } }));
     },
-    [doc, activeSection, commitDoc],
+    [activeSection, commitDoc],
+  );
+
+  const handleTemplateNodesChange = useCallback(
+    (templateName: string, nodes: FsNode[]) => {
+      commitDoc((d) => ({ ...d, templates: { ...d.templates, [templateName]: nodes } }));
+    },
+    [commitDoc],
   );
 
   const confirmDiscard = () => !dirty || window.confirm("You have unsaved changes — discard them and continue?");
@@ -287,7 +310,7 @@ export default function App() {
   // Edits the @name directive; keeps the header filename in sync.
   const setDocName = (value: string) => {
     const trimmed = value.trim();
-    commitDoc({ ...doc, name: trimmed || "Untitled Structure" });
+    commitDoc((d) => ({ ...d, name: trimmed || "Untitled Structure" }));
     if (trimmed) setFileName(`${trimmed}.fh`);
   };
 
@@ -295,7 +318,7 @@ export default function App() {
   const renameFile = (value: string) => {
     const base = value.trim().replace(/\.fh$/i, "").trim();
     setFileName(base ? `${base}.fh` : null);
-    if (base) commitDoc({ ...doc, name: base });
+    if (base) commitDoc((d) => ({ ...d, name: base }));
   };
 
   const copyStructure = async () => {
@@ -340,13 +363,25 @@ export default function App() {
   };
 
   // ---------------- Template ops ----------------
+  const TEMPLATE_PALETTE = [
+    "#bc8cff", "#f97583", "#79c0ff", "#56d4dd",
+    "#d2a8ff", "#ffa657", "#7ee787", "#ff7b72",
+  ];
+
   const addTemplate = (name: string) => {
     if (doc.templates[name]) {
       notify(`Template "${name}" already exists.`, "error");
       return;
     }
-    const next: FhDocument = { ...doc, templates: { ...doc.templates, [name]: [] }, templateOrder: [...doc.templateOrder, name] };
-    commitDoc(next);
+    commitDoc((d) => {
+      const colorIndex = d.templateOrder.length % TEMPLATE_PALETTE.length;
+      return {
+        ...d,
+        templates: { ...d.templates, [name]: [] },
+        templateOrder: [...d.templateOrder, name],
+        templateColors: { ...d.templateColors, [name]: TEMPLATE_PALETTE[colorIndex] },
+      };
+    });
     setActiveSection(name);
     notify(`Added template "${name}".`);
   };
@@ -356,34 +391,70 @@ export default function App() {
       notify(`Template "${newName}" already exists.`, "error");
       return;
     }
-    const templates: Record<string, FsNode[]> = {};
-    for (const [k, v] of Object.entries(doc.templates)) {
-      templates[k === oldName ? newName : k] = renameTemplateInTree(v, oldName, newName);
-    }
-    const root = renameTemplateInTree(doc.root, oldName, newName);
-    const next: FhDocument = {
-      ...doc,
-      root,
-      templates,
-      templateOrder: doc.templateOrder.map((t) => (t === oldName ? newName : t)),
-    };
-    commitDoc(next);
+    commitDoc((d) => {
+      const templates: Record<string, FsNode[]> = {};
+      for (const [k, v] of Object.entries(d.templates)) {
+        templates[k === oldName ? newName : k] = renameTemplateInTree(v, oldName, newName);
+      }
+      const root = renameTemplateInTree(d.root, oldName, newName);
+      const templateColors = { ...d.templateColors };
+      if (templateColors[oldName]) {
+        templateColors[newName] = templateColors[oldName];
+        delete templateColors[oldName];
+      }
+      return {
+        ...d,
+        root,
+        templates,
+        templateOrder: d.templateOrder.map((t) => (t === oldName ? newName : t)),
+        templateColors,
+      };
+    });
     if (activeSection === oldName) setActiveSection(newName);
     notify(`Renamed "${oldName}" to "${newName}".`);
   };
 
   const deleteTemplate = (name: string) => {
-    const templates: Record<string, FsNode[]> = {};
-    for (const [k, v] of Object.entries(doc.templates)) if (k !== name) templates[k] = removeTemplateRefs(v, name);
-    const next: FhDocument = {
-      ...doc,
-      root: removeTemplateRefs(doc.root, name),
-      templates,
-      templateOrder: doc.templateOrder.filter((t) => t !== name),
-    };
-    commitDoc(next);
+    commitDoc((d) => {
+      const templates: Record<string, FsNode[]> = {};
+      for (const [k, v] of Object.entries(d.templates)) if (k !== name) templates[k] = removeTemplateRefs(v, name);
+      const templateColors = { ...d.templateColors };
+      delete templateColors[name];
+      return {
+        ...d,
+        root: removeTemplateRefs(d.root, name),
+        templates,
+        templateOrder: d.templateOrder.filter((t) => t !== name),
+        templateColors,
+      };
+    });
     if (activeSection === name) setActiveSection(null);
     notify(`Deleted template "${name}" and its @insert references.`);
+  };
+
+  const setTemplateColor = (name: string, color: string) => {
+    commitDoc((d) => ({
+      ...d,
+      templateColors: { ...d.templateColors, [name]: color },
+    }));
+  };
+
+  const createTemplateFromInsert = (name: string) => {
+    if (doc.templates[name]) {
+      notify(`Template "${name}" already exists.`, "error");
+      return;
+    }
+    commitDoc((d) => {
+      const colorIndex = d.templateOrder.length % TEMPLATE_PALETTE.length;
+      return {
+        ...d,
+        templates: { ...d.templates, [name]: [{ id: "1", kind: "folder", name: "New Folder", children: [] }] },
+        templateOrder: [...d.templateOrder, name],
+        templateColors: { ...d.templateColors, [name]: TEMPLATE_PALETTE[colorIndex] },
+      };
+    });
+    // Don't open modal - the inline expansion is handled by PlusDropdown
+    notify(`Created template "${name}" and inserted it.`);
   };
 
   // Always keep a template selected when one exists (initial load, file open,
@@ -472,12 +543,8 @@ export default function App() {
         </div>
         <div className="spacer" />
         <div className="toolbar">
-          <button
-            className={`btn ${sourceOpen ? "active" : ""}`}
-            onClick={() => setSourceOpen((v) => !v)}
-            title="Toggle the raw .fh source editor"
-          >
-            <CodeIcon />
+          <button className="btn" onClick={() => setTemplatesOpen(true)} title="Manage templates">
+            Templates
           </button>
           <select className="btn" style={{ padding: "6px 8px" }} value={sample} onChange={(e) => loadSample(e.target.value)}>
             <option value="">Load sample…</option>
@@ -513,39 +580,27 @@ export default function App() {
       <div className="mobile-tabs">
         <button
           className={`tab ${mobileTab === "source" ? "active" : ""}`}
-          onClick={() => { setMobileTab("source"); if (!sourceOpen) setSourceOpen(true); }}
+          onClick={() => { setMobileTab("source"); if (!sourceOpen) toggleSource(); }}
         >Source</button>
-        <button className={`tab ${mobileTab === "templates" ? "active" : ""}`} onClick={() => setMobileTab("templates")}>Templates</button>
+        <button className={`tab`} onClick={() => setTemplatesOpen(true)}>Templates</button>
         <button className={`tab ${mobileTab === "root" ? "active" : ""}`} onClick={() => setMobileTab("root")}>Root</button>
         <button className={`tab ${mobileTab === "preview" ? "active" : ""}`} onClick={() => setMobileTab("preview")}>Preview</button>
       </div>
 
       <main className="main" ref={mainRef}>
         {sourceOpen && (
-          <div className={mobileTab !== "source" ? "mobile-hidden" : ""}>
+          <>
             <SourcePane
+              className={mobileTab !== "source" ? "mobile-hidden" : ""}
               style={{ flex: `0 0 ${colPct.source}%` }}
               source={source}
               onChange={applySource}
               issues={parsed.issues}
               hasErrors={errors.length > 0}
             />
-            <ColumnResizer onResize={handleColumnResize("source", "templates")} />
-          </div>
+            <ColumnResizer onResize={handleColumnResize("source", "root")} />
+          </>
         )}
-        <TemplatesPane
-          className={mobileTab !== "templates" ? "mobile-hidden" : ""}
-          style={{ flex: `0 0 ${colPct.templates}%` }}
-          templates={doc.templateOrder}
-          active={activeSection}
-          tree={activeSection ? doc.templates[activeSection] ?? [] : []}
-          onSelect={setActiveSection}
-          onAdd={addTemplate}
-          onRename={renameTemplate}
-          onDelete={deleteTemplate}
-          onNodesChange={handleTemplateChange}
-        />
-        <ColumnResizer onResize={handleColumnResize("templates", "root")} />
         <RootDesignerPane
           className={mobileTab !== "root" ? "mobile-hidden" : ""}
           style={{ flex: `0 0 ${colPct.root}%` }}
@@ -553,7 +608,15 @@ export default function App() {
           onNameChange={setDocName}
           tree={doc.root}
           templates={doc.templateOrder}
+          templateMap={doc.templates}
+          templateColors={doc.templateColors}
           onNodesChange={handleRootChange}
+          onTemplateNodesChange={handleTemplateNodesChange}
+          onAddTemplate={createTemplateFromInsert}
+          onRenameTemplate={renameTemplate}
+          onSetTemplateColor={setTemplateColor}
+          sourceOpen={sourceOpen}
+          onToggleSource={toggleSource}
         />
         <ColumnResizer onResize={handleColumnResize("root", "preview")} />
         <PreviewPane
@@ -582,6 +645,21 @@ export default function App() {
           </div>
         ))}
       </div>
+
+      <TemplatesModal
+        open={templatesOpen}
+        onClose={() => setTemplatesOpen(false)}
+        templates={doc.templateOrder}
+        active={activeSection}
+        tree={activeSection ? doc.templates[activeSection] ?? [] : []}
+        templateColors={doc.templateColors}
+        onSelect={setActiveSection}
+        onAdd={addTemplate}
+        onRename={renameTemplate}
+        onDelete={deleteTemplate}
+        onSetTemplateColor={setTemplateColor}
+        onNodesChange={handleTemplateChange}
+      />
     </div>
   );
 }

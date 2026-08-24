@@ -8,11 +8,12 @@ interface SourcePaneProps {
   issues: ParseIssue[];
   hasErrors: boolean;
   style?: CSSProperties;
+  className?: string;
 }
 
-export default function SourcePane({ source, onChange, issues, hasErrors, style }: SourcePaneProps) {
+export default function SourcePane({ source, onChange, issues, hasErrors, style, className }: SourcePaneProps) {
   return (
-    <section className="pane source-sidebar" style={style}>
+    <section className={`pane source-sidebar ${className ?? ""}`} style={style}>
       <div className="pane-head">
         <span className="title">Source (.fh)</span>
         <div className="right">

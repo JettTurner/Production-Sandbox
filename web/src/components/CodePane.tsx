@@ -30,6 +30,7 @@ function highlightSource(source: string): string {
         /(<span class="tok-dir">@(?:template|insert)<\/span>\s+)([\w\-_.]+)/,
         '$1<span class="tok-string">$2</span>',
       );
+      html = html.replace(/(#[0-9a-fA-F]{3,8}\b)/g, '<span class="tok-hex">$1</span>');
       return html;
     })
     .join("\n");

@@ -10,8 +10,16 @@ interface PreviewProps {
 
 const INDENT = 20;
 
+type ColorMode = "depth" | "type";
+
+const TYPE_COLORS = {
+  folder: "#2f81f7",
+  file: "#7ee787",
+};
+
 export default function Preview({ tree, errors }: PreviewProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [colorMode, setColorMode] = useState<ColorMode>("depth");
   const maxDepth = computeMaxDepth(tree);
 
   const toggle = (id: string) =>
@@ -40,7 +48,9 @@ export default function Preview({ tree, errors }: PreviewProps) {
     const isFile = node.name.includes(".");
     const isCollapsed = collapsed.has(node.id);
     const hasChildren = node.children.length > 0;
-    const color = gradientColor([47, 129, 247], [63, 185, 80], maxDepth ? depth / maxDepth : 0);
+    const depthColor = gradientColor([47, 129, 247], [63, 185, 80], maxDepth ? depth / maxDepth : 0);
+    const typeColor = isFile ? TYPE_COLORS.file : TYPE_COLORS.folder;
+    const color = colorMode === "depth" ? depthColor : typeColor;
 
     return (
       <div key={node.id}>
@@ -56,7 +66,7 @@ export default function Preview({ tree, errors }: PreviewProps) {
           <span className="node-icon" style={{ color: isFile ? "#7ee787" : "#2f81f7" }}>
             {isFile ? <FileIcon /> : hasChildren ? <FolderIcon /> : <FolderArrowIcon />}
           </span>
-          <span className="name" style={{ color: isFile ? "#79c0ff" : color }} title={node.name}>
+          <span className="name" style={{ color: isFile && colorMode === "type" ? typeColor : color }} title={node.name}>
             {node.name}
           </span>
           {hasChildren && (
@@ -98,7 +108,22 @@ export default function Preview({ tree, errors }: PreviewProps) {
       ) : (
         <>
           <div style={{ display: "flex", gap: 6, padding: "8px 12px 0", alignItems: "center" }}>
-            <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Fully resolved structure — what gets written to disk.</span>
+            <div className="preview-mode-toggle">
+              <button
+                className={`btn ghost small ${colorMode === "depth" ? "active" : ""}`}
+                onClick={() => setColorMode("depth")}
+                title="Color names by depth gradient"
+              >
+                Depth
+              </button>
+              <button
+                className={`btn ghost small ${colorMode === "type" ? "active" : ""}`}
+                onClick={() => setColorMode("type")}
+                title="Color names by node type (folder / file)"
+              >
+                Type
+              </button>
+            </div>
             <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
               <button className="btn ghost" onClick={() => setAll(false)}>
                 Expand all

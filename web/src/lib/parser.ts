@@ -62,18 +62,44 @@ export function parseFh(source: string): ParseResult {
   let version = "1.0";
   let docName = "";
   let sawRoot = false;
+  const templateColors: Record<string, string> = {};
 
   for (const l of lines) {
     const t = l.trimmed;
 
-    if (t === "@root") {
-      current = rootSection;
-      rootSection.items = []; // a later @root resets the root (matches legacy)
-      sawRoot = true;
+    if (/^@root\b/.test(t)) {
+      const colorTok = t.replace(/^@root\b/, "").trim();
+      if (!colorTok || /^#[0-9a-fA-F]{3,8}$/.test(colorTok)) {
+        current = rootSection;
+        rootSection.items = []; // a later @root resets the root (matches legacy)
+        sawRoot = true;
+        if (colorTok) templateColors["@root"] = colorTok;
+        continue;
+      }
+      issues.push({
+        line: l.lineNo,
+        severity: "warning",
+        message: `Invalid color "${colorTok}" after @root was ignored.`,
+      });
       continue;
     }
-    if (t.startsWith("@template")) {
-      const name = t.split(/\s+/)[1];
+    if (/^@template-color\b/.test(t)) {
+      issues.push({
+        line: l.lineNo,
+        severity: "warning",
+        message: '@template-color was removed; put the color after @root/@template (e.g. "@template X #79c0ff").',
+      });
+      continue;
+    }
+    if (/^@template\b/.test(t)) {
+      let rest = t.replace(/^@template\b/, "").trim();
+      const colorM = rest.match(/^(.*?)[ \t]+(#[0-9a-fA-F]{3,8})$/);
+      let color: string | undefined;
+      if (colorM) {
+        rest = colorM[1].trim();
+        color = colorM[2];
+      }
+      const name = rest.split(/\s+/)[0];
       if (!name) {
         issues.push({ line: l.lineNo, severity: "error", message: "@template requires a name." });
         continue;
@@ -82,6 +108,7 @@ export function parseFh(source: string): ParseResult {
         issues.push({ line: l.lineNo, severity: "error", message: `Duplicate template name "${name}".` });
         continue;
       }
+      if (color) templateColors[name] = color;
       const section: Section = { kind: "template", templateName: name, items: [] };
       templates.set(name, section);
       current = section;
@@ -140,6 +167,7 @@ export function parseFh(source: string): ParseResult {
     root,
     templates: templateTrees,
     templateOrder,
+    templateColors,
   };
 
   return { doc, issues };

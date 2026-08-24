@@ -7,7 +7,8 @@ export function serializeFh(doc: FhDocument): string {
   lines.push("");
 
   lines.push("#---Root---");
-  lines.push("@root");
+  const rootColor = doc.templateColors?.["@root"];
+  lines.push(rootColor ? `@root ${rootColor}` : "@root");
   appendTree(lines, doc.root, 0);
   lines.push("");
 
@@ -16,7 +17,8 @@ export function serializeFh(doc: FhDocument): string {
     for (const name of doc.templateOrder) {
       const tree = doc.templates[name];
       if (!tree) continue;
-      lines.push(`@template ${name}`);
+      const color = doc.templateColors?.[name];
+      lines.push(color ? `@template ${name} ${color}` : `@template ${name}`);
       appendTree(lines, tree, 0);
       lines.push("");
     }

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FsNode } from "../lib/types";
 import { makeFolder, makeInsert, moveNode, removeNode, insertChild } from "../lib/treeEdit";
 import { ChevronIcon, CopyIcon, FileIcon, FolderIcon, GripIcon, PlusChildIcon, PlusIcon, XIcon } from "./icons";
+import ColorPicker from "./ColorPicker";
 
 export interface SectionRef {
   kind: "root" | "template";
@@ -14,6 +15,14 @@ interface DesignerProps {
   section: SectionRef;
   templates: string[];
   onNodesChange: (nodes: FsNode[]) => void;
+  templateMap?: Record<string, FsNode[]>;
+  templateColors?: Record<string, string>;
+  expandedInserts?: Set<string>;
+  onToggleInsert?: (id: string) => void;
+  onTemplateNodesChange?: (templateName: string, nodes: FsNode[]) => void;
+  onAddTemplate?: (name: string) => void;
+  onRenameTemplate?: (oldName: string, newName: string) => void;
+  onSetTemplateColor?: (name: string, color: string) => void;
 }
 
 interface DropState {
@@ -38,12 +47,28 @@ type AddSpec =
   | { kind: "file" }
   | { kind: "insert"; template: string };
 
-export default function Designer({ nodes, section, templates, onNodesChange }: DesignerProps) {
+export default function Designer({ nodes, section, templates, onNodesChange, templateMap, templateColors, expandedInserts, onToggleInsert, onTemplateNodesChange, onAddTemplate, onRenameTemplate, onSetTemplateColor }: DesignerProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropState, setDropState] = useState<DropState | null>(null);
   const [editing, setEditing] = useState<EditState | null>(null);
+  const [editingTemplateName, setEditingTemplateName] = useState<{ id: string; value: string } | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
+
+  // Stable refs for expanded-insert callbacks (avoids remounting nested Designers)
+  const onTemplateNodesChangeRef = useRef(onTemplateNodesChange);
+  onTemplateNodesChangeRef.current = onTemplateNodesChange;
+  const onRenameTemplateRef = useRef(onRenameTemplate);
+  onRenameTemplateRef.current = onRenameTemplate;
+  const onSetTemplateColorRef = useRef(onSetTemplateColor);
+  onSetTemplateColorRef.current = onSetTemplateColor;
+
+  const makeInsertNodesChange = useCallback(
+    (templateName: string) => (newNodes: FsNode[]) => {
+      onTemplateNodesChangeRef.current?.(templateName, newNodes);
+    },
+    [],
+  );
 
   const toggle = (id: string) =>
     setCollapsed((prev) => {
@@ -115,17 +140,25 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
   const renderNode = (node: FsNode, depth: number, path: number[]) => {
     const isCollapsed = collapsed.has(node.id);
     const children = node.children;
-    const insertable = node.kind === "folder";
+    const isFile = node.name.includes(".");
+    const insertable = node.kind === "folder" && !isFile;
     const dropTarget = dropState?.targetId === node.id ? dropState.position : null;
     const isEditing = editing ? pathsEqual(path, editing.path) : false;
     const typeClass =
       node.kind === "insert" ? "type-insert" : node.name.includes(".") ? "type-file" : "type-folder";
+    const insertColor = node.kind === "insert" ? templateColors?.[node.name] : undefined;
+    const hasInsertChildren = node.kind === "insert" && node.children.length > 0;
+    const isExpanded = node.kind === "insert" && expandedInserts?.has(node.name);
+    // Use template color for @insert nodes, otherwise undefined
+    const nodeColor = node.kind === "insert" ? templateColors?.[node.name] : undefined;
 
     return (
       <div key={node.id}>
         <div
-          className={`tree-row ${dragId === node.id ? "dragging" : ""} ${dropTarget ? "droppable" : ""}`}
-          style={{ marginLeft: depth * 20 }}
+          className={`tree-row ${dragId === node.id ? "dragging" : ""} ${dropTarget ? "droppable" : ""} ${isExpanded ? "insert-expanded-row" : ""}`}
+          style={{ marginLeft: depth * 20, ...(hasInsertChildren && insertColor ? { borderLeftColor: insertColor, borderLeftWidth: 3, borderLeftStyle: "solid" } : {}) }}
+          title={node.kind === "insert" ? `Double-click to ${isExpanded ? "collapse" : "expand"} template "${node.name}"` : undefined}
+          onDoubleClick={node.kind === "insert" && onToggleInsert ? () => onToggleInsert(node.name) : undefined}
           onDragOver={(e) => {
             e.preventDefault();
             e.dataTransfer.dropEffect = "move";
@@ -174,7 +207,7 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
           >
             <GripIcon />
           </span>
-          <span className={`node-icon ${node.kind === "folder" ? "folder" : "insert"}`}>
+          <span className={`node-icon ${node.kind === "folder" ? "folder" : "insert"}`} style={insertColor ? { color: insertColor } : undefined}>
             {node.kind === "folder" ? (node.name.includes(".") ? <FileIcon /> : <FolderIcon />) : <CopyIcon />}
           </span>
 
@@ -186,6 +219,7 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
                   onChange={(e) => onNodesChange(updateName(nodes, node.id, e.target.value))}
                   onDragOver={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
+                  style={insertColor ? { color: insertColor, borderColor: insertColor } : undefined}
                 >
                   {templates.length ? (
                     templates.map((t) => (
@@ -216,7 +250,7 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
             )}
           </span>
 
-          <span className={`hover-actions ${typeClass}`}>
+            <span className={`hover-actions ${typeClass}`} style={nodeColor ? { "--node-color": nodeColor } as React.CSSProperties : undefined}>
               <IconButton
                 title="Add after (same level)"
                 onClick={(e) =>
@@ -249,6 +283,74 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
               </IconButton>
             </span>
         </div>
+
+        {node.kind === "insert" && expandedInserts?.has(node.name) && templateMap?.[node.name] && (
+          <div className="insert-expanded" style={{ marginLeft: (depth + 1) * 20, "--template-color": templateColors?.[node.name] ?? "#bc8cff" } as React.CSSProperties}>
+            <div className="insert-expanded-header">
+              {editingTemplateName?.id === node.name ? (
+                <input
+                  className="insert-expanded-name editing"
+                  autoFocus
+                  value={editingTemplateName.value}
+                  onChange={(e) => setEditingTemplateName({ id: node.name, value: e.target.value })}
+                  onBlur={() => {
+                    if (editingTemplateName.value.trim() && editingTemplateName.value !== node.name) {
+                      onRenameTemplate?.(node.name, editingTemplateName.value.trim());
+                    }
+                    setEditingTemplateName(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      if (editingTemplateName.value.trim() && editingTemplateName.value !== node.name) {
+                        onRenameTemplate?.(node.name, editingTemplateName.value.trim());
+                      }
+                      setEditingTemplateName(null);
+                    }
+                    if (e.key === "Escape") {
+                      setEditingTemplateName(null);
+                    }
+                    e.stopPropagation();
+                  }}
+                />
+              ) : (
+                <input
+                  className="insert-expanded-name"
+                  value={node.name}
+                  readOnly
+                  title="Double-click to rename template"
+                  onDoubleClick={() => setEditingTemplateName({ id: node.name, value: node.name })}
+                />
+              )}
+              {onSetTemplateColor && (
+                <ColorPicker
+                  value={templateColors?.[node.name] ?? "#bc8cff"}
+                  onChange={(c) => onSetTemplateColor(node.name, c)}
+                />
+              )}
+              <button
+                className="icon-btn"
+                title="Collapse template"
+                onClick={() => onToggleInsert?.(node.name)}
+              >
+                <XIcon />
+              </button>
+            </div>
+            <Designer
+              nodes={templateMap[node.name]}
+              section={{ kind: "template", name: node.name }}
+              templates={templates}
+              onNodesChange={makeInsertNodesChange(node.name)}
+              templateMap={templateMap}
+              templateColors={templateColors}
+              expandedInserts={expandedInserts}
+              onToggleInsert={onToggleInsert}
+              onTemplateNodesChange={onTemplateNodesChange}
+              onAddTemplate={onAddTemplate}
+              onRenameTemplate={onRenameTemplate}
+              onSetTemplateColor={onSetTemplateColor}
+            />
+          </div>
+        )}
 
         {insertable && !isCollapsed && children.length > 0 && children.map((c, i) => renderNode(c, depth + 1, [...path, i]))}
       </div>
@@ -288,6 +390,8 @@ export default function Designer({ nodes, section, templates, onNodesChange }: D
           targetLabel={menu.childOf ? "child" : menu.parentId ? "sibling" : "top-level item"}
           templates={templates}
           onAdd={(spec) => addNode(menu.parentId, menu.index, spec)}
+          onAddTemplate={onAddTemplate}
+          onToggleInsert={onToggleInsert}
           onClose={() => setMenu(null)}
         />
       )}
@@ -314,12 +418,16 @@ function PlusDropdown({
   targetLabel,
   templates,
   onAdd,
+  onAddTemplate,
+  onToggleInsert,
   onClose,
 }: {
   anchor: HTMLElement;
   targetLabel: string;
   templates: string[];
   onAdd: (spec: AddSpec) => void;
+  onAddTemplate?: (name: string) => void;
+  onToggleInsert?: (name: string) => void;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -370,10 +478,75 @@ function PlusDropdown({
           </button>
         ))
       ) : (
-        <div className="dd-empty">No structures yet — create one with the + Template button above.</div>
+        <div className="dd-empty">No structures yet — create one below.</div>
+      )}
+      {onAddTemplate && (
+        <>
+          <div className="dd-sep" />
+          <PlusDropdownCreateTemplate
+            onAddTemplate={onAddTemplate}
+            onAdd={onAdd}
+            onToggleInsert={onToggleInsert}
+            onClose={onClose}
+          />
+        </>
       )}
     </div>,
     document.body,
+  );
+}
+
+function PlusDropdownCreateTemplate({
+  onAddTemplate,
+  onAdd,
+  onToggleInsert,
+  onClose,
+}: {
+  onAddTemplate: (name: string) => void;
+  onAdd: (spec: AddSpec) => void;
+  onToggleInsert?: (name: string) => void;
+  onClose: () => void;
+}) {
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+
+  const commit = () => {
+    const n = name.trim();
+    if (n) {
+      onAddTemplate(n);
+      onAdd({ kind: "insert", template: n });
+      onToggleInsert?.(n);
+      onClose();
+    }
+    setName("");
+    setCreating(false);
+  };
+
+  if (creating) {
+    return (
+      <div style={{ padding: "4px 8px" }}>
+        <input
+          className="name-input small"
+          autoFocus
+          placeholder="New template name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") { setName(""); setCreating(false); }
+            e.stopPropagation();
+          }}
+          style={{ width: "100%" }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <button className="dd-item" onClick={() => setCreating(true)}>
+      <span className="ic"><PlusIcon /></span> New template…
+    </button>
   );
 }
 
