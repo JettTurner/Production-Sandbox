@@ -75,7 +75,8 @@ re-serializes the document and re-parses it.
     │                             env switches to the dev server
     ├── installer/
     │   └── folder-hierarchy-studio.iss  ← Inno Setup script consumed by build.bat;
-    │                             per-user install ({autopf} → %LocalAppData%\Programs),
+    │                             machine-wide install ({autopf}\ProductionSandbox\
+    │                             Folder Hierarchy Designer, requires elevation),
     │                             version injected via /DMyAppVersion, packaging input via /DAppSourceDir,
     │                             SetupIconFile from build/icon.ico
     ├── build/
@@ -277,7 +278,8 @@ Program Files or on PATH). Outputs:
 
 - **Installer**: `web/installer/Output/FolderHierarchyStudio-Setup-<version>.exe`
   (version read from `web/package.json`, passed to the `.iss` as
-  `/DMyAppVersion`; per-user install, no UAC).
+  `/DMyAppVersion`; machine-wide install to
+  `Program Files\ProductionSandbox\Folder Hierarchy Designer`, needs elevation).
 - **Unpacked app**: `%LOCALAPPDATA%\fh-studio-build\win-unpacked\FolderHierarchyStudio.exe`.
 
 The packaging output deliberately lives **outside** the repo: OneDrive syncs

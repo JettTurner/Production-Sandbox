@@ -21,15 +21,20 @@
 
 #define MyAppName "Folder Hierarchy Studio"
 #define MyAppExeName "FolderHierarchyStudio.exe"
+; All products of the ProductionSandbox suite live under one Program Files
+; folder, each app in its own subfolder.
+#define PublisherDirName "ProductionSandbox"
+#define MyAppDirName "Folder Hierarchy Designer"
 
 [Setup]
 AppId={{DB014296-6B71-450A-A269-CAABF0132960}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-AppPublisher=Folder Hierarchy Studio
-DefaultDirName={autopf}\{#MyAppName}
-; Per-user install (no UAC): {autopf} resolves to %LocalAppData%\Programs.
-PrivilegesRequired=lowest
+AppPublisher={#PublisherDirName}
+; Machine-wide install: {autopf} resolves to C:\Program Files (64-bit view),
+; so the app lands in Program Files\ProductionSandbox\Folder Hierarchy Designer.
+DefaultDirName={autopf}\{#PublisherDirName}\{#MyAppDirName}
+PrivilegesRequired=admin
 OutputDir=Output
 OutputBaseFilename=FolderHierarchyStudio-Setup-{#MyAppVersion}
 Compression=lzma2/max

@@ -9,9 +9,10 @@ import {
   CodeIcon,
   CopyIcon,
   DownloadIcon,
-  EraserIcon,
   FolderArrowIcon,
-  UploadIcon,
+  FolderIcon,
+  PlusIcon,
+  SaveIcon,
 } from "./components/icons";
 import { parseFh } from "./lib/parser";
 import { serializeFh } from "./lib/serializer";
@@ -81,6 +82,7 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [sample, setSample] = useState("");
   const [sourceOpen, setSourceOpen] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"source" | "templates" | "root" | "preview">("root");
   const fileRef = useRef<HTMLInputElement>(null);
   const baselineRef = useRef(DEFAULT_SOURCE);
 
@@ -455,7 +457,6 @@ export default function App() {
           <span className="logo">
             <BrandMarkIcon />
           </span>
-          Folder Heirarchy Studio
           <small>.fh</small>
         </div>
         <div className="filename-wrap">
@@ -476,7 +477,7 @@ export default function App() {
             onClick={() => setSourceOpen((v) => !v)}
             title="Toggle the raw .fh source editor"
           >
-            <CodeIcon /> Source
+            <CodeIcon />
           </button>
           <select className="btn" style={{ padding: "6px 8px" }} value={sample} onChange={(e) => loadSample(e.target.value)}>
             <option value="">Load sample…</option>
@@ -487,31 +488,41 @@ export default function App() {
             ))}
           </select>
           <button className="btn" onClick={newDoc} title="New structure">
-            <EraserIcon /> New
+            <PlusIcon />
           </button>
-          <button className="btn" onClick={() => fileRef.current?.click()}>
-            <UploadIcon /> Open
+          <button className="btn" onClick={() => fileRef.current?.click()} title="Open .fh file">
+            <FolderIcon />
           </button>
-          <button className="btn" onClick={saveFh}>
-            <DownloadIcon /> Save .fh
+          <button className="btn" onClick={saveFh} title="Save .fh file">
+            <SaveIcon />
           </button>
           <span style={{ width: 1, height: 24, background: "var(--border)" }} />
-          <button className="btn" onClick={copyStructure}>
-            <CopyIcon /> Copy
+          <button className="btn" onClick={copyStructure} title="Copy to clipboard">
+            <CopyIcon />
           </button>
-          <button className="btn" onClick={downloadZip}>
-            <DownloadIcon /> Zip
+          <button className="btn" onClick={downloadZip} title="Download as zip">
+            <DownloadIcon />
           </button>
           <button className="btn success" onClick={createFolders} title="Create the folders on your disk (Chrome/Edge)">
-            <FolderArrowIcon /> Create on Disk
+            <FolderArrowIcon />
           </button>
           <input ref={fileRef} type="file" accept=".fh,.pbkstruct,.txt,text/plain" hidden onChange={openFromInput} />
         </div>
       </header>
 
+      <div className="mobile-tabs">
+        <button
+          className={`tab ${mobileTab === "source" ? "active" : ""}`}
+          onClick={() => { setMobileTab("source"); if (!sourceOpen) setSourceOpen(true); }}
+        >Source</button>
+        <button className={`tab ${mobileTab === "templates" ? "active" : ""}`} onClick={() => setMobileTab("templates")}>Templates</button>
+        <button className={`tab ${mobileTab === "root" ? "active" : ""}`} onClick={() => setMobileTab("root")}>Root</button>
+        <button className={`tab ${mobileTab === "preview" ? "active" : ""}`} onClick={() => setMobileTab("preview")}>Preview</button>
+      </div>
+
       <main className="main" ref={mainRef}>
         {sourceOpen && (
-          <>
+          <div className={mobileTab !== "source" ? "mobile-hidden" : ""}>
             <SourcePane
               style={{ flex: `0 0 ${colPct.source}%` }}
               source={source}
@@ -520,9 +531,10 @@ export default function App() {
               hasErrors={errors.length > 0}
             />
             <ColumnResizer onResize={handleColumnResize("source", "templates")} />
-          </>
+          </div>
         )}
         <TemplatesPane
+          className={mobileTab !== "templates" ? "mobile-hidden" : ""}
           style={{ flex: `0 0 ${colPct.templates}%` }}
           templates={doc.templateOrder}
           active={activeSection}
@@ -535,6 +547,7 @@ export default function App() {
         />
         <ColumnResizer onResize={handleColumnResize("templates", "root")} />
         <RootDesignerPane
+          className={mobileTab !== "root" ? "mobile-hidden" : ""}
           style={{ flex: `0 0 ${colPct.root}%` }}
           name={doc.name}
           onNameChange={setDocName}
@@ -544,6 +557,7 @@ export default function App() {
         />
         <ColumnResizer onResize={handleColumnResize("root", "preview")} />
         <PreviewPane
+          className={mobileTab !== "preview" ? "mobile-hidden" : ""}
           style={{ flex: "1 1 0" }}
           stats={stats}
           tree={resolved.tree}

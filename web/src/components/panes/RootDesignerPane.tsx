@@ -9,6 +9,7 @@ interface RootDesignerPaneProps {
   templates: string[];
   onNodesChange: (nodes: FsNode[]) => void;
   style?: CSSProperties;
+  className?: string;
 }
 
 export default function RootDesignerPane({
@@ -18,9 +19,10 @@ export default function RootDesignerPane({
   templates,
   onNodesChange,
   style,
+  className,
 }: RootDesignerPaneProps) {
   return (
-    <section className="pane" style={style}>
+    <section className={`pane root-pane ${className ?? ""}`} style={style}>
       <div className="pane-head">
         <span className="title">Root Designer</span>
         <div className="right">

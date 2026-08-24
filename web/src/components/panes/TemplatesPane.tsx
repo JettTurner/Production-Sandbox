@@ -13,6 +13,7 @@ interface TemplatesPaneProps {
   onDelete: (name: string) => void;
   onNodesChange: (nodes: FsNode[]) => void;
   style?: CSSProperties;
+  className?: string;
 }
 
 export default function TemplatesPane({
@@ -25,9 +26,10 @@ export default function TemplatesPane({
   onDelete,
   onNodesChange,
   style,
+  className,
 }: TemplatesPaneProps) {
   return (
-    <section className="pane template-pane" style={style}>
+    <section className={`pane template-pane ${className ?? ""}`} style={style}>
       <div className="pane-head">
         <span className="title">Templates</span>
         <div className="right">

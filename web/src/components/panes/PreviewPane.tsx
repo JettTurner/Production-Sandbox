@@ -13,11 +13,12 @@ interface PreviewPaneProps {
   tree: FsNode[];
   errors: string[];
   style?: CSSProperties;
+  className?: string;
 }
 
-export default function PreviewPane({ stats, tree, errors, style }: PreviewPaneProps) {
+export default function PreviewPane({ stats, tree, errors, style, className }: PreviewPaneProps) {
   return (
-    <section className="pane" style={style}>
+    <section className={`pane preview-pane ${className ?? ""}`} style={style}>
       <div className="pane-head">
         <span className="title">Resolved Preview</span>
         <div className="right">
