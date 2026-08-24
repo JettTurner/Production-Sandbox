@@ -18,7 +18,7 @@ interface DesignerProps {
   templateMap?: Record<string, FsNode[]>;
   templateColors?: Record<string, string>;
   expandedInserts?: Set<string>;
-  onToggleInsert?: (id: string) => void;
+  onToggleInsert?: (nodeId: string) => void;
   onTemplateNodesChange?: (templateName: string, nodes: FsNode[]) => void;
   onAddTemplate?: (name: string) => void;
   onRenameTemplate?: (oldName: string, newName: string) => void;
@@ -148,7 +148,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
       node.kind === "insert" ? "type-insert" : node.name.includes(".") ? "type-file" : "type-folder";
     const insertColor = node.kind === "insert" ? templateColors?.[node.name] : undefined;
     const hasInsertChildren = node.kind === "insert" && node.children.length > 0;
-    const isExpanded = node.kind === "insert" && expandedInserts?.has(node.name);
+    const isExpanded = node.kind === "insert" && expandedInserts?.has(node.id);
     // Use template color for @insert nodes, otherwise undefined
     const nodeColor = node.kind === "insert" ? templateColors?.[node.name] : undefined;
 
@@ -158,7 +158,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
           className={`tree-row ${dragId === node.id ? "dragging" : ""} ${dropTarget ? "droppable" : ""} ${isExpanded ? "insert-expanded-row" : ""}`}
           style={{ marginLeft: depth * 20, ...(hasInsertChildren && insertColor ? { borderLeftColor: insertColor, borderLeftWidth: 3, borderLeftStyle: "solid" } : {}) }}
           title={node.kind === "insert" ? `Double-click to ${isExpanded ? "collapse" : "expand"} template "${node.name}"` : undefined}
-          onDoubleClick={node.kind === "insert" && onToggleInsert ? () => onToggleInsert(node.name) : undefined}
+          onDoubleClick={node.kind === "insert" && onToggleInsert ? () => onToggleInsert(node.id) : undefined}
           onDragOver={(e) => {
             e.preventDefault();
             e.dataTransfer.dropEffect = "move";
@@ -284,7 +284,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
             </span>
         </div>
 
-        {node.kind === "insert" && expandedInserts?.has(node.name) && templateMap?.[node.name] && (
+        {node.kind === "insert" && expandedInserts?.has(node.id) && templateMap?.[node.name] && (
           <div className="insert-expanded" style={{ marginLeft: (depth + 1) * 20, "--template-color": templateColors?.[node.name] ?? "#bc8cff" } as React.CSSProperties}>
             <div className="insert-expanded-header">
               {editingTemplateName?.id === node.name ? (
@@ -330,7 +330,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
               <button
                 className="icon-btn"
                 title="Collapse template"
-                onClick={() => onToggleInsert?.(node.name)}
+                onClick={() => onToggleInsert?.(node.id)}
               >
                 <XIcon />
               </button>
@@ -391,7 +391,6 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
           templates={templates}
           onAdd={(spec) => addNode(menu.parentId, menu.index, spec)}
           onAddTemplate={onAddTemplate}
-          onToggleInsert={onToggleInsert}
           onClose={() => setMenu(null)}
         />
       )}
@@ -419,7 +418,6 @@ function PlusDropdown({
   templates,
   onAdd,
   onAddTemplate,
-  onToggleInsert,
   onClose,
 }: {
   anchor: HTMLElement;
@@ -427,7 +425,6 @@ function PlusDropdown({
   templates: string[];
   onAdd: (spec: AddSpec) => void;
   onAddTemplate?: (name: string) => void;
-  onToggleInsert?: (name: string) => void;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -486,7 +483,6 @@ function PlusDropdown({
           <PlusDropdownCreateTemplate
             onAddTemplate={onAddTemplate}
             onAdd={onAdd}
-            onToggleInsert={onToggleInsert}
             onClose={onClose}
           />
         </>
@@ -499,12 +495,10 @@ function PlusDropdown({
 function PlusDropdownCreateTemplate({
   onAddTemplate,
   onAdd,
-  onToggleInsert,
   onClose,
 }: {
   onAddTemplate: (name: string) => void;
   onAdd: (spec: AddSpec) => void;
-  onToggleInsert?: (name: string) => void;
   onClose: () => void;
 }) {
   const [creating, setCreating] = useState(false);
@@ -515,7 +509,6 @@ function PlusDropdownCreateTemplate({
     if (n) {
       onAddTemplate(n);
       onAdd({ kind: "insert", template: n });
-      onToggleInsert?.(n);
       onClose();
     }
     setName("");

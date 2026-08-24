@@ -19,6 +19,7 @@ interface RootDesignerPaneProps {
   onSetTemplateColor: (name: string, color: string) => void;
   sourceOpen: boolean;
   onToggleSource: () => void;
+  onOpenTemplates: () => void;
   style?: CSSProperties;
   className?: string;
 }
@@ -37,16 +38,17 @@ export default function RootDesignerPane({
   onSetTemplateColor,
   sourceOpen,
   onToggleSource,
+  onOpenTemplates,
   style,
   className,
 }: RootDesignerPaneProps) {
   const [expandedInserts, setExpandedInserts] = useState<Set<string>>(new Set());
 
-  const toggleInsert = useCallback((id: string) => {
+  const toggleInsert = useCallback((nodeId: string) => {
     setExpandedInserts((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
       return next;
     });
   }, []);
@@ -75,6 +77,13 @@ export default function RootDesignerPane({
       <div className="pane-head">
         <span className="title">Root Designer</span>
         <div className="right">
+          <button
+            className="btn"
+            onClick={onOpenTemplates}
+            title="Manage templates"
+          >
+            Templates
+          </button>
           <button
             className={`btn ${sourceOpen ? "active" : ""}`}
             onClick={onToggleSource}

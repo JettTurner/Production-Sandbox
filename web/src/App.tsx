@@ -543,9 +543,6 @@ export default function App() {
         </div>
         <div className="spacer" />
         <div className="toolbar">
-          <button className="btn" onClick={() => setTemplatesOpen(true)} title="Manage templates">
-            Templates
-          </button>
           <select className="btn" style={{ padding: "6px 8px" }} value={sample} onChange={(e) => loadSample(e.target.value)}>
             <option value="">Load sample…</option>
             {SAMPLES.map((s) => (
@@ -582,7 +579,6 @@ export default function App() {
           className={`tab ${mobileTab === "source" ? "active" : ""}`}
           onClick={() => { setMobileTab("source"); if (!sourceOpen) toggleSource(); }}
         >Source</button>
-        <button className={`tab`} onClick={() => setTemplatesOpen(true)}>Templates</button>
         <button className={`tab ${mobileTab === "root" ? "active" : ""}`} onClick={() => setMobileTab("root")}>Root</button>
         <button className={`tab ${mobileTab === "preview" ? "active" : ""}`} onClick={() => setMobileTab("preview")}>Preview</button>
       </div>
@@ -617,6 +613,7 @@ export default function App() {
           onSetTemplateColor={setTemplateColor}
           sourceOpen={sourceOpen}
           onToggleSource={toggleSource}
+          onOpenTemplates={() => setTemplatesOpen(true)}
         />
         <ColumnResizer onResize={handleColumnResize("root", "preview")} />
         <PreviewPane
