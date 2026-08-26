@@ -17,10 +17,22 @@ const TYPE_COLORS = {
   file: "#7ee787",
 };
 
+function sortNodes(nodes: FsNode[]): FsNode[] {
+  const sorted = [...nodes].sort((a, b) => {
+    const aFile = a.name.includes(".");
+    const bFile = b.name.includes(".");
+    if (aFile !== bFile) return aFile ? 1 : -1;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  });
+  return sorted.map((n) => ({ ...n, children: sortNodes(n.children) }));
+}
+
 export default function Preview({ tree, errors }: PreviewProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [colorMode, setColorMode] = useState<ColorMode>("depth");
-  const maxDepth = computeMaxDepth(tree);
+  const [sortAlpha, setSortAlpha] = useState(true);
+  const displayTree = sortAlpha ? sortNodes(tree) : tree;
+  const maxDepth = computeMaxDepth(displayTree);
 
   const toggle = (id: string) =>
     setCollapsed((prev) => {
@@ -124,6 +136,13 @@ export default function Preview({ tree, errors }: PreviewProps) {
                 Type
               </button>
             </div>
+            <button
+              className={`btn ghost small ${sortAlpha ? "active" : ""}`}
+              onClick={() => setSortAlpha((s) => !s)}
+              title="Sort alphabetically (folders first, then files)"
+            >
+              A–Z
+            </button>
             <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
               <button className="btn ghost" onClick={() => setAll(false)}>
                 Expand all
@@ -133,7 +152,7 @@ export default function Preview({ tree, errors }: PreviewProps) {
               </button>
             </div>
           </div>
-          <div className="preview-tree">{tree.map((n) => render(n, 0))}</div>
+          <div className="preview-tree">{displayTree.map((n) => render(n, 0))}</div>
         </>
       )}
     </div>
