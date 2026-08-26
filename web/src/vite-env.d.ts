@@ -28,6 +28,15 @@ interface FileSystemPickerOptions {
   startIn?: string;
 }
 
+interface FileSystemSaveFilePickerOptions extends FileSystemPickerOptions {
+  suggestedName?: string;
+  types?: Array<{
+    description: string;
+    accept: Record<string, string[]>;
+  }>;
+}
+
 interface Window {
   showDirectoryPicker?: (options?: FileSystemPickerOptions) => Promise<FileSystemDirectoryHandle>;
+  showSaveFilePicker?: (options?: FileSystemSaveFilePickerOptions) => Promise<FileSystemFileHandle>;
 }

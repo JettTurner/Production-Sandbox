@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
-import type { KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import type { ClipboardEvent, KeyboardEvent } from "react";
 
 interface CodePaneProps {
   source: string;
@@ -36,40 +36,131 @@ function highlightSource(source: string): string {
     .join("\n");
 }
 
+// --- Contenteditable caret helpers -----------------------------------------
+// A contenteditable exposes its caret/selection as a DOM Range, not numeric
+// offsets. These convert between Range <-> absolute character offset within the
+// editor so we can preserve the caret across React re-renders.
+
+function posFor(container: HTMLElement, target: number): { node: Text; offset: number } | null {
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  let remaining = target;
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const len = node.textContent?.length ?? 0;
+    if (remaining <= len) return { node: node as Text, offset: remaining };
+    remaining -= len;
+  }
+  return null;
+}
+
+function getOffsets(container: HTMLElement): { start: number; end: number } {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return { start: 0, end: 0 };
+  const range = sel.getRangeAt(0);
+  if (!container.contains(range.startContainer) || !container.contains(range.endContainer)) {
+    return { start: 0, end: 0 };
+  }
+  const startRange = document.createRange();
+  startRange.selectNodeContents(container);
+  startRange.setEnd(range.startContainer, range.startOffset);
+  const endRange = document.createRange();
+  endRange.selectNodeContents(container);
+  endRange.setEnd(range.endContainer, range.endOffset);
+  return { start: startRange.toString().length, end: endRange.toString().length };
+}
+
+function setOffsets(container: HTMLElement, start: number, end: number): void {
+  const range = document.createRange();
+  const startPos = posFor(container, start);
+  const endPos = posFor(container, end);
+  if (startPos) range.setStart(startPos.node, startPos.offset);
+  else range.setStart(container, 0);
+  if (endPos) range.setEnd(endPos.node, endPos.offset);
+  else range.setEnd(container, container.childNodes.length);
+  const sel = window.getSelection();
+  if (!sel) return;
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
 export default function CodePane({ source, onChange }: CodePaneProps) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const backdropRef = useRef<HTMLPreElement>(null);
+  const editableRef = useRef<HTMLDivElement>(null);
   const gutterRef = useRef<HTMLPreElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const lineareaRef = useRef<HTMLDivElement>(null);
+  const pendingCaretRef = useRef<{ start: number; end: number } | null>(null);
+
   const highlighted = useMemo(() => highlightSource(source), [source]);
   const lineNumbers = useMemo(
     () => source.split("\n").map((_, i) => i + 1).join("\n"),
     [source],
   );
 
-  useEffect(() => {
-    const ta = textareaRef.current;
-    const pre = backdropRef.current;
-    const gutter = gutterRef.current;
-    if (!ta || !pre || !gutter) return;
-    const sync = () => {
-      pre.scrollTop = ta.scrollTop;
-      pre.scrollLeft = ta.scrollLeft;
-      gutter.scrollTop = ta.scrollTop;
-    };
-    ta.addEventListener("scroll", sync);
-    return () => ta.removeEventListener("scroll", sync);
+  // The gutter is a separate <pre>, so drive its typography/padding from the
+  // editable's real computed metrics to guarantee the numbers line up with the
+  // text lines. The caret/selection live IN the editable, so they can never
+  // drift from the rendered text.
+  useLayoutEffect(() => {
+    const ed = editableRef.current;
+    const wrap = lineareaRef.current;
+    if (!ed || !wrap) return;
+    const cs = getComputedStyle(ed);
+    const s = wrap.style;
+    s.setProperty("--code-font", cs.fontFamily);
+    s.setProperty("--code-size", cs.fontSize);
+    s.setProperty("--code-leading", cs.lineHeight);
+    s.setProperty("--code-pad-top", cs.paddingTop);
+    s.setProperty("--code-pad-left", cs.paddingLeft);
+    s.setProperty("--code-pad-right", cs.paddingRight);
   }, []);
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    const { selectionStart: start, selectionEnd: end, value } = ta;
+  // Restore the caret after React replaces the editable's HTML on re-render.
+  useLayoutEffect(() => {
+    const ed = editableRef.current;
+    const pending = pendingCaretRef.current;
+    if (!ed || !pending) return;
+    pendingCaretRef.current = null;
+    setOffsets(ed, pending.start, pending.end);
+  }, [source]);
+
+  // Keep the line-number gutter scrolled in step with the text (editor scroller).
+  useEffect(() => {
+    const sc = scrollerRef.current;
+    const gt = gutterRef.current;
+    if (!sc || !gt) return;
+    const sync = () => {
+      gt.scrollTop = sc.scrollTop;
+    };
+    sc.addEventListener("scroll", sync);
+    sync();
+    return () => sc.removeEventListener("scroll", sync);
+  }, []);
+
+  const handleInput = () => {
+    const ed = editableRef.current;
+    if (!ed) return;
+    const offs = getOffsets(ed);
+    const text = ed.textContent ?? "";
+    if (text !== source) {
+      pendingCaretRef.current = offs;
+      onChange(text);
+    }
+  };
+
+  const handlePaste = (e: ClipboardEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData("text");
+    if (text) document.execCommand("insertText", false, text);
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const ed = editableRef.current;
+    if (!ed) return;
+    const { start, end } = getOffsets(ed);
+    const value = ed.textContent ?? "";
     const apply = (next: string, caretStart: number, caretEnd: number) => {
+      pendingCaretRef.current = { start: caretStart, end: caretEnd };
       onChange(next);
-      requestAnimationFrame(() => {
-        ta.selectionStart = caretStart;
-        ta.selectionEnd = caretEnd;
-      });
     };
 
     // Enter: keep the current line's indentation on the new line.
@@ -115,23 +206,22 @@ export default function CodePane({ source, onChange }: CodePaneProps) {
 
   return (
     <div className="code-wrap">
-      <div className="code-linearea">
+      <div className="code-linearea" ref={lineareaRef}>
         <pre ref={gutterRef} className="code-gutter" aria-hidden="true">
           {lineNumbers}
         </pre>
-        <div className="code-editor">
-          <pre ref={backdropRef} className="code-backdrop" aria-hidden="true">
-            <span dangerouslySetInnerHTML={{ __html: highlighted }} />
-          </pre>
-          <textarea
-            ref={textareaRef}
-            className="code-input"
-            value={source}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={handleKeyDown}
+        <div ref={scrollerRef} className="code-editor">
+          <div
+            ref={editableRef}
+            className="code-editable"
+            contentEditable
+            suppressContentEditableWarning
             spellCheck={false}
-            wrap="off"
+            onInput={handleInput}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             aria-label="Folder hierarchy source (.fh)"
+            dangerouslySetInnerHTML={{ __html: highlighted }}
           />
         </div>
       </div>

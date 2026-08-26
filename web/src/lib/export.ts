@@ -39,6 +39,27 @@ export function downloadText(text: string, filename: string): void {
   downloadBlob(blob, filename);
 }
 
+export function supportsSaveFilePicker(): boolean {
+  return typeof window !== "undefined" && "showSaveFilePicker" in window;
+}
+
+export async function saveFileAs(text: string, filename: string): Promise<boolean> {
+  if (!supportsSaveFilePicker()) return false;
+  try {
+    const handle = await window.showSaveFilePicker!({
+      suggestedName: filename,
+      types: [{ description: "Folder Hierarchy", accept: { "text/plain": [".fh"] } }],
+    });
+    const writable = await handle.createWritable();
+    await writable.write(text);
+    await writable.close();
+    return true;
+  } catch (err) {
+    if ((err as Error).name === "AbortError") return false;
+    throw err;
+  }
+}
+
 export async function copyText(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);

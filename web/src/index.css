@@ -367,55 +367,45 @@ html.electron .header a {
   position: relative;
   flex: 1 1 auto;
   min-width: 0;
+  overflow: auto;
 }
 .code-gutter {
   flex: 0 0 auto;
   margin: 0;
   min-width: 42px;
-  padding: 12px 10px;
+  padding: var(--code-pad-top, 12px) 10px;
   text-align: right;
   color: #484f58;
   background: #0d1117;
   border-right: 1px solid var(--border);
-  font-family: var(--mono);
-  font-size: 12.5px;
-  line-height: 1.6;
+  font-family: var(--code-font, var(--mono));
+  font-size: var(--code-size, 13px);
+  line-height: var(--code-leading, 20px);
   white-space: pre;
   overflow: hidden;
   user-select: none;
   pointer-events: none;
 }
-.code-backdrop,
-.code-input {
+.code-editable {
   margin: 0;
-  padding: 12px 14px;
-  font-family: var(--mono);
-  font-size: 12.5px;
-  line-height: 1.6;
+  min-width: 100%;
+  width: max-content;
+  padding:
+    var(--code-pad-top, 12px)
+    var(--code-pad-right, 14px)
+    var(--code-pad-top, 12px)
+    var(--code-pad-left, 14px);
+  box-sizing: border-box;
+  font-family: var(--code-font, var(--mono));
+  font-size: var(--code-size, 13px);
+  line-height: var(--code-leading, 20px);
   tab-size: 4;
   white-space: pre;
-  word-break: normal;
-}
-.code-backdrop {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
   color: var(--text);
-  overflow: hidden;
-}
-.code-input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: none;
-  outline: none;
-  background: transparent;
-  color: transparent;
   caret-color: var(--accent);
-  resize: none;
+  outline: none;
 }
-.code-input::selection {
+.code-editable::selection {
   background: rgba(47, 129, 247, 0.3);
 }
 .tok-dir {
@@ -883,6 +873,7 @@ html.electron .header a {
   flex: 0 0 auto;
   white-space: nowrap;
   cursor: default;
+  user-select: none;
 }
 .tree-row .name.editing {
   background: var(--bg);

@@ -16,7 +16,7 @@ import {
 import { parseFh } from "./lib/parser";
 import { serializeFh } from "./lib/serializer";
 import { countNodes, resolveDoc, treeToText } from "./lib/resolver";
-import { copyText, downloadBlob, downloadText, zipTree } from "./lib/export";
+import { copyText, downloadBlob, downloadText, saveFileAs, zipTree } from "./lib/export";
 import { createOnDisk, supportsFsAccess } from "./lib/folders";
 import { removeTemplateRefs, renameTemplateInTree } from "./lib/treeEdit";
 import type { FhDocument, FsNode } from "./lib/types";
@@ -301,8 +301,16 @@ export default function App() {
     }
   };
 
-  const saveFh = useCallback(() => {
-    downloadText(serializeFh(doc), fileName ?? `${doc.name}.fh`);
+  const saveFh = useCallback(async () => {
+    const name = fileName ?? `${doc.name}.fh`;
+    const text = serializeFh(doc);
+    try {
+      const saved = await saveFileAs(text, name);
+      if (!saved) downloadText(text, name);
+    } catch (err) {
+      notify(`Save failed: ${(err as Error).message}`, "error");
+      return;
+    }
     baselineRef.current = source;
     notify("Saved .fh file.");
   }, [doc, fileName, source, notify]);
