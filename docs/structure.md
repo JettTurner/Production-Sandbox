@@ -118,8 +118,8 @@ Owns all shared state and wires the four column panes together.
 
 - **State**: raw `.fh` source string, parsed doc, filename, undo/redo history
   (`pastRef`/`futureRef`, cap 30), dirty tracking (`baselineRef`),
-  source-sidebar visibility, per-column pixel widths, active template selection,
-  toast notifications.
+  leftmost-column visibility + active tab (`LeftTab`), per-column pixel widths,
+  active template selection, toast notifications.
 - **`applySource(next, discrete?)`**: the ONLY mutation path for source text.
   Re-parses, updates history (typing coalesced within 800 ms unless
   `discrete=true`; designer/file actions always discrete).
@@ -127,15 +127,15 @@ Owns all shared state and wires the four column panes together.
   redo (skipped when focus is in INPUT/SELECT), beforeunload guard +
   `confirmDiscard()` gates on new/open/sample.
 - **Layout**: header (filename input with fixed `.fh` chip, templates button,
-  samples, save/zip/copy/disk buttons) → a vertical "Source" tab pinned to the
-  screen's left edge (desktop) that toggles the raw `.fh` source sidebar →
-  `<main>` with resizable columns:
-  optional Source sidebar | Root Designer pane | Preview pane.
-  Templates open as a modal dialog (`TemplatesModal`).
+  samples, save/zip/copy/disk buttons) → a vertical `LeftRail` of tabs pinned to
+  the screen's left edge (desktop) that swaps in content in the leftmost column
+  → `<main>` with resizable columns:
+  leftmost column (Source or Templates, driven by the rail) | Root Designer
+  pane | Preview pane. Templates are edited in the leftmost column (no modal);
+  the Root Designer's "Templates" button opens that column on its Templates tab.
   `ColumnResizer` handles sit between columns; last column flex-fills to the
-  screen edge.
-  Opening the Source sidebar splits Source/Root/Preview equally; closing it
-  restores a 50/50 Root/Preview split.
+  screen edge. Opening the leftmost column splits its content / Root / Preview
+  equally; closing it restores a 50/50 Root/Preview split.
 - Auto-selects the first template whenever the active template is missing.
 
 ### `web/src/lib/types.ts` — core data model
@@ -234,35 +234,41 @@ Used by both the Root Designer and Templates modal.
   insert/template names, `#hex` colors), line-number gutter synced to scroll.
 - Tab inserts tab (Shift+Tab outdents, multi-line aware); Enter auto-indents.
 
-### `web/src/components/SectionPicker.tsx` — templates modal header tools
+### `web/src/components/SectionPicker.tsx` — templates pane header tools
 
 - Template chooser dropdown, rename (pencil) / delete (×) for the active
-  template, "+ Template" inline creator input.
-
-### `web/src/components/TemplatesModal.tsx` — templates modal dialog
-
-- Full-screen modal overlay containing SectionPicker + Designer for the active
-  template. Opened from the header "Templates" button. Closes on Escape or
-  backdrop click. Purple-themed header.
+  template, "+ Template" inline creator input. Rendered at the top of the
+  `TemplatesPane` (the Templates tab of the leftmost column).
 
 ### `web/src/components/ColumnResizer.tsx` — drag handle between columns
 
 - Mouse-drag divider; reports per-move pixel deltas via `onResize(dx)`.
 
+### `web/src/components/LeftRail.tsx` — vertical tab rail
+
+- Generic, data-driven vertical tab strip pinned to the desktop's left edge
+  (activity-bar style): a stack of icon + vertical-label tabs, one per leftmost
+  column pane. Clicking the active tab collapses the column, clicking another
+  swaps its content. Pane definitions come from `App` via the `tabs`/`active`/
+  `onToggle` props; new panels are added by appending to the tab list.
+
 ### `web/src/components/icons.tsx` — inline SVG icon set
 
 Folder, File, Chevron, Grip, Plus, PlusChild (line + plus underneath),
-X, Copy, Download, Upload, FolderArrow, Sparkle, Eraser, Pencil, Code.
+X, Copy, Download, Upload, FolderArrow, Sparkle, Eraser, Pencil, Code, Menu.
 
 ### `web/src/components/panes/` — top-level columns
 
 | Pane | Wraps | Notes |
 |---|---|---|
-| `SourcePane.tsx` | CodePane + issue list | collapsible sidebar, closed by default |
+| `SourcePane.tsx` | CodePane + issue list | the Source tab of the leftmost column; closed by default |
+| `TemplatesPane.tsx` | SectionPicker + Designer | the Templates tab of the leftmost column |
 | `RootDesignerPane.tsx` | name input + Designer | edits `@name` + root tree; inline template expansion via expand button on `@insert` rows |
 | `PreviewPane.tsx` | stats header + Preview | folders/files/total counts |
 
-All accept an optional `style` prop (flex sizing from App).
+The leftmost column shows whichever pane the active `LeftRail` tab selects
+(`SourcePane` or `TemplatesPane`); each keeps its own default header. All pane
+components accept an optional `style` prop (flex sizing from App).
 
 ---
 

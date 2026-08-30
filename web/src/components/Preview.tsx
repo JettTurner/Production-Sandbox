@@ -119,7 +119,7 @@ export default function Preview({ tree, errors }: PreviewProps) {
         </div>
       ) : (
         <>
-          <div style={{ display: "flex", gap: 6, padding: "8px 12px 0", alignItems: "center" }}>
+          <div className="preview-toolbar">
             <div className="preview-mode-toggle">
               <button
                 className={`btn ghost small ${colorMode === "depth" ? "active" : ""}`}

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import ColumnResizer from "./components/ColumnResizer";
 import PreviewPane from "./components/panes/PreviewPane";
 import RootDesignerPane from "./components/panes/RootDesignerPane";
 import SourcePane from "./components/panes/SourcePane";
-import TemplatesModal from "./components/TemplatesModal";
+import TemplatesPane from "./components/panes/TemplatesPane";
+import LeftRail from "./components/LeftRail";
 import {
   BrandMarkIcon,
   CodeIcon,
@@ -14,6 +16,7 @@ import {
   MenuIcon,
   PlusIcon,
   SaveIcon,
+  SparkleIcon,
 } from "./components/icons";
 import { parseFh } from "./lib/parser";
 import { serializeFh } from "./lib/serializer";
@@ -62,6 +65,8 @@ interface Toast {
   msg: string;
 }
 
+type LeftTab = "source" | "templates";
+
 let toastSeq = 0;
 
 function emptyDoc(source: string): FhDocument {
@@ -83,24 +88,34 @@ export default function App() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [sample, setSample] = useState("");
-  const [sourceOpen, setSourceOpen] = useState(false);
-  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [leftPane, setLeftPane] = useState<LeftTab | null>(null);
   const [mobileTab, setMobileTab] = useState<"source" | "root" | "preview">("root");
   const [moreOpen, setMoreOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const baselineRef = useRef(DEFAULT_SOURCE);
   const moreRef = useRef<HTMLDivElement>(null);
 
-  // Keep the mobile tab bar in sync when the source editor is toggled from
-  // inside the root designer: opening reveals the Source tab, closing while
-  // it's active falls back to Root so a pane is always visible.
-  const toggleSource = useCallback(() => {
-    setSourceOpen((v) => {
-      if (!v) setMobileTab("source");
-      else setMobileTab((t) => (t === "source" ? "root" : t));
-      return !v;
-    });
+  // The leftmost column shows whichever panel the vertical rail tab maps to.
+  // Opening it reveals the Source mobile tab so a pane is always visible.
+  const leftOpen = leftPane !== null;
+  const openLeftPane = useCallback((tab: LeftTab) => {
+    setLeftPane(tab);
+    setMobileTab("source");
   }, []);
+  const toggleLeftPane = useCallback((tab: LeftTab) => {
+    if (leftPane === tab) {
+      setLeftPane(null);
+      setMobileTab((t) => (t === "source" ? "root" : t));
+    } else {
+      setLeftPane(tab);
+      setMobileTab("source");
+    }
+  }, [leftPane]);
+
+  const leftPanels: { id: LeftTab; icon: ReactNode; label: string }[] = [
+    { id: "source", icon: <CodeIcon />, label: "Source" },
+    { id: "templates", icon: <SparkleIcon />, label: "Templates" },
+  ];
 
   type PaneId = "source" | "root" | "preview";
   const MIN_PCT = 10;
@@ -120,16 +135,16 @@ export default function App() {
     const cs = el ? getComputedStyle(el) : null;
     const padL = parseFloat(cs?.paddingLeft ?? "0") || 0;
     const padR = parseFloat(cs?.paddingRight ?? "0") || 0;
-    const resizers = sourceOpen ? RESIZER_W * 2 : RESIZER_W;
+    const resizers = leftOpen ? RESIZER_W * 2 : RESIZER_W;
     const usablePx = el && el.clientWidth > resizers + padL + padR
       ? el.clientWidth - resizers - padL - padR
       : (el?.clientWidth ?? window.innerWidth);
     const usablePct = (usablePx / (el?.clientWidth ?? usablePx)) * 100;
-    // When the source sidebar is open all three columns share the space
+    // When the leftmost column is open all three columns share the space
     // equidistantly; otherwise Root and Preview split it 50/50.
-    const rootPct = sourceOpen ? usablePct / 3 : usablePct / 2;
-    setColPct({ source: sourceOpen ? rootPct : 0, root: rootPct, preview: 0 });
-  }, [sourceOpen]);
+    const rootPct = leftOpen ? usablePct / 3 : usablePct / 2;
+    setColPct({ source: leftOpen ? rootPct : 0, root: rootPct, preview: 0 });
+  }, [leftOpen]);
 
   useEffect(() => {
     evenSplit();
@@ -642,34 +657,43 @@ export default function App() {
       <div className="mobile-tabs">
         <button
           className={`tab ${mobileTab === "source" ? "active" : ""}`}
-          onClick={() => { setMobileTab("source"); if (!sourceOpen) toggleSource(); }}
+          onClick={() => openLeftPane("source")}
         >Source</button>
         <button className={`tab ${mobileTab === "root" ? "active" : ""}`} onClick={() => setMobileTab("root")}>Root</button>
         <button className={`tab ${mobileTab === "preview" ? "active" : ""}`} onClick={() => setMobileTab("preview")}>Preview</button>
       </div>
 
       <div className="app-body">
-        <button
-          className={`source-tab ${sourceOpen ? "active" : ""}`}
-          onClick={toggleSource}
-          title="Toggle the raw .fh source editor"
-          aria-pressed={sourceOpen}
-        >
-          <CodeIcon />
-          <span className="tab-label">Source</span>
-        </button>
+        <LeftRail tabs={leftPanels} active={leftPane} onToggle={toggleLeftPane} />
 
         <main className="main" ref={mainRef}>
-        {sourceOpen && (
+        {leftOpen && (
           <>
-            <SourcePane
-              className={mobileTab !== "source" ? "mobile-hidden" : ""}
-              style={{ flex: `0 0 ${colPct.source}%` }}
-              source={source}
-              onChange={applySource}
-              issues={parsed.issues}
-              hasErrors={errors.length > 0}
-            />
+            {leftPane === "source" ? (
+              <SourcePane
+                className={mobileTab !== "source" ? "mobile-hidden" : ""}
+                style={{ flex: `0 0 ${colPct.source}%` }}
+                source={source}
+                onChange={applySource}
+                issues={parsed.issues}
+                hasErrors={errors.length > 0}
+              />
+            ) : (
+              <TemplatesPane
+                className={mobileTab !== "source" ? "mobile-hidden" : ""}
+                style={{ flex: `0 0 ${colPct.source}%` }}
+                templates={doc.templateOrder}
+                active={activeSection}
+                tree={activeSection ? doc.templates[activeSection] ?? [] : []}
+                templateColors={doc.templateColors}
+                onSelect={setActiveSection}
+                onAdd={addTemplate}
+                onRename={renameTemplate}
+                onDelete={deleteTemplate}
+                onSetTemplateColor={setTemplateColor}
+                onNodesChange={handleTemplateChange}
+              />
+            )}
             <ColumnResizer onResize={handleColumnResize("source", "root")} />
           </>
         )}
@@ -687,7 +711,7 @@ export default function App() {
           onAddTemplate={createTemplateFromInsert}
           onRenameTemplate={renameTemplate}
           onSetTemplateColor={setTemplateColor}
-          onOpenTemplates={() => setTemplatesOpen(true)}
+          onOpenTemplates={() => openLeftPane("templates")}
         />
         <ColumnResizer onResize={handleColumnResize("root", "preview")} />
         <PreviewPane
@@ -717,21 +741,6 @@ export default function App() {
           </div>
         ))}
       </div>
-
-      <TemplatesModal
-        open={templatesOpen}
-        onClose={() => setTemplatesOpen(false)}
-        templates={doc.templateOrder}
-        active={activeSection}
-        tree={activeSection ? doc.templates[activeSection] ?? [] : []}
-        templateColors={doc.templateColors}
-        onSelect={setActiveSection}
-        onAdd={addTemplate}
-        onRename={renameTemplate}
-        onDelete={deleteTemplate}
-        onSetTemplateColor={setTemplateColor}
-        onNodesChange={handleTemplateChange}
-      />
     </div>
   );
 }
