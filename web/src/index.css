@@ -415,7 +415,9 @@ html.electron .more-dropdown {
 .main {
   flex: 1 1 auto;
   display: flex;
-  padding: 12px;
+  /* Reserved left gutter for the pinned "Source" side tab so the leftmost pane
+     never sits underneath it (mobile overrides this to a uniform 8px). */
+  padding: 12px 12px 12px 46px;
   min-height: 0;
   overflow: hidden;
 }

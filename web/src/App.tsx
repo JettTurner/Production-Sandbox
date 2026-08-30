@@ -117,9 +117,12 @@ export default function App() {
   // optional sidebar that steals its share equally from both.
   const evenSplit = useCallback(() => {
     const el = mainRef.current;
+    const cs = el ? getComputedStyle(el) : null;
+    const padL = parseFloat(cs?.paddingLeft ?? "0") || 0;
+    const padR = parseFloat(cs?.paddingRight ?? "0") || 0;
     const resizers = sourceOpen ? RESIZER_W * 2 : RESIZER_W;
-    const usablePx = el && el.clientWidth > resizers + 24
-      ? el.clientWidth - resizers - 24
+    const usablePx = el && el.clientWidth > resizers + padL + padR
+      ? el.clientWidth - resizers - padL - padR
       : (el?.clientWidth ?? window.innerWidth);
     const usablePct = (usablePx / (el?.clientWidth ?? usablePx)) * 100;
     // When the source sidebar is open all three columns share the space
