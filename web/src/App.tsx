@@ -694,7 +694,8 @@ export default function App() {
           tree={resolved.tree}
           errors={resolved.errors}
         />
-      </main>
+        </main>
+      </div>
 
       <footer className="statusbar">
         <span className={`dot ${errors.length ? "err" : warnings.length ? "warn" : "ok"}`} />

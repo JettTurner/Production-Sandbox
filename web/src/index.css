@@ -67,13 +67,22 @@ button {
   position: relative;
 }
 
+/* Column between the header and the status bar: holds the side tab + main panes.
+   The tab anchors to its top-left, so it sits just under the header. */
+.app-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Side tab on the screen's left edge: a persistent affordance showing the raw
    .fh source editor can be opened/closed. Label reads vertically, icon upright. */
 .source-tab {
   position: absolute;
   left: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 0;
   z-index: 60;
   display: flex;
   flex-direction: column;
