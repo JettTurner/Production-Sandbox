@@ -126,16 +126,17 @@ Owns all shared state and wires the four column panes together.
 - **Keyboard**: Ctrl+S save, Ctrl+O open, Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y
   redo (skipped when focus is in INPUT/SELECT), beforeunload guard +
   `confirmDiscard()` gates on new/open/sample.
-- **Layout**: header (filename input with fixed `.fh` chip, templates button,
-  samples, save/zip/copy/disk buttons) → a vertical `LeftRail` of tabs pinned to
-  the screen's left edge (desktop) that swaps in content in the leftmost column
-  → `<main>` with resizable columns:
+- **Layout**: header (filename input with fixed `.fh` chip, samples,
+  save/zip/copy/disk buttons) → a vertical `LeftRail` of tabs pinned to the
+  screen's left edge (desktop) that swaps in content in the leftmost column →
+  `<main>` with resizable columns:
   leftmost column (Source or Templates, driven by the rail) | Root Designer
   pane | Preview pane. Templates are edited in the leftmost column (no modal);
-  the Root Designer's "Templates" button opens that column on its Templates tab.
+  on mobile a Templates tab sits next to Source in the `.mobile-tabs` bar.
   `ColumnResizer` handles sit between columns; last column flex-fills to the
   screen edge. Opening the leftmost column splits its content / Root / Preview
-  equally; closing it restores a 50/50 Root/Preview split.
+  equally; closing it restores a 50/50 Root/Preview split. The status bar's
+  right side shows a rotating tip (`TIPS`) that cycles on a timer.
 - Auto-selects the first template whenever the active template is missing.
 
 ### `web/src/lib/types.ts` — core data model
@@ -200,7 +201,7 @@ All return new trees; never mutate.
 
 ### `web/src/components/Designer.tsx` — interactive tree editor (shared)
 
-Used by both the Root Designer and Templates modal.
+Used by both the Root Designer and the Templates pane.
 
 - Recursive rows: chevron, drag handle, type icon, name zone (name + child
   count), always-visible control column pinned right, colored by node type
@@ -263,7 +264,7 @@ X, Copy, Download, Upload, FolderArrow, Sparkle, Eraser, Pencil, Code, Menu.
 |---|---|---|
 | `SourcePane.tsx` | CodePane + issue list | the Source tab of the leftmost column; closed by default |
 | `TemplatesPane.tsx` | SectionPicker + Designer | the Templates tab of the leftmost column |
-| `RootDesignerPane.tsx` | name input + Designer | edits `@name` + root tree; inline template expansion via expand button on `@insert` rows |
+| `RootDesignerPane.tsx` | name input + color + Designer | single consolidated header (name `@name` + `@root` color) + root tree; inline template expansion via expand button on `@insert` rows |
 | `PreviewPane.tsx` | stats header + Preview | folders/files/total counts |
 
 The leftmost column shows whichever pane the active `LeftRail` tab selects

@@ -67,6 +67,17 @@ interface Toast {
 
 type LeftTab = "source" | "templates";
 
+// Rotating status-bar tips; cycles on a timer so the footer stays informative
+// without stealing space from the panes.
+const TIPS = [
+  "double-click to rename · drag to move · ＋ to add · double-click @insert to expand",
+  "Names with a dot are files; everything else is a folder",
+  "Click a color swatch to style @root or a @template",
+  "Drop a .fh file anywhere to open it",
+  "Ctrl+S saves · Ctrl+O opens · Ctrl+Z undoes",
+  "Right-click a row for its controls",
+];
+
 let toastSeq = 0;
 
 function emptyDoc(source: string): FhDocument {
@@ -89,26 +100,30 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [sample, setSample] = useState("");
   const [leftPane, setLeftPane] = useState<LeftTab | null>(null);
-  const [mobileTab, setMobileTab] = useState<"source" | "root" | "preview">("root");
+  const [mobileTab, setMobileTab] = useState<"source" | "templates" | "root" | "preview">("root");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [tipIndex, setTipIndex] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const baselineRef = useRef(DEFAULT_SOURCE);
   const moreRef = useRef<HTMLDivElement>(null);
 
-  // The leftmost column shows whichever panel the vertical rail tab maps to.
-  // Opening it reveals the Source mobile tab so a pane is always visible.
+  // The leftmost column shows whichever panel the vertical rail tab maps to. On
+  // mobile the Source / Templates tabs both drive the leftmost column, so it is
+  // visible for either. Opening it reveals that mobile tab so a pane is visible.
   const leftOpen = leftPane !== null;
+  const mobileLeftTab = (t: "source" | "templates" | "root" | "preview") =>
+    t === "source" || t === "templates";
   const openLeftPane = useCallback((tab: LeftTab) => {
     setLeftPane(tab);
-    setMobileTab("source");
+    setMobileTab(tab);
   }, []);
   const toggleLeftPane = useCallback((tab: LeftTab) => {
     if (leftPane === tab) {
       setLeftPane(null);
-      setMobileTab((t) => (t === "source" ? "root" : t));
+      setMobileTab((t) => (mobileLeftTab(t) ? "root" : t));
     } else {
       setLeftPane(tab);
-      setMobileTab("source");
+      setMobileTab(tab);
     }
   }, [leftPane]);
 
@@ -559,6 +574,12 @@ export default function App() {
     return () => document.removeEventListener("mousedown", onClick);
   }, [moreOpen]);
 
+  // Cycle the status-bar tip while the app is idle.
+  useEffect(() => {
+    const id = setInterval(() => setTipIndex((i) => (i + 1) % TIPS.length), 6000);
+    return () => clearInterval(id);
+  }, []);
+
   const stats = countNodes(resolved.tree);
   const errors = parsed.issues.filter((i) => i.severity === "error");
   const warnings = parsed.issues.filter((i) => i.severity === "warning");
@@ -659,6 +680,10 @@ export default function App() {
           className={`tab ${mobileTab === "source" ? "active" : ""}`}
           onClick={() => openLeftPane("source")}
         >Source</button>
+        <button
+          className={`tab ${mobileTab === "templates" ? "active" : ""}`}
+          onClick={() => openLeftPane("templates")}
+        >Templates</button>
         <button className={`tab ${mobileTab === "root" ? "active" : ""}`} onClick={() => setMobileTab("root")}>Root</button>
         <button className={`tab ${mobileTab === "preview" ? "active" : ""}`} onClick={() => setMobileTab("preview")}>Preview</button>
       </div>
@@ -671,7 +696,7 @@ export default function App() {
           <>
             {leftPane === "source" ? (
               <SourcePane
-                className={mobileTab !== "source" ? "mobile-hidden" : ""}
+                className={mobileTab !== "source" && mobileTab !== "templates" ? "mobile-hidden" : ""}
                 style={{ flex: `0 0 ${colPct.source}%` }}
                 source={source}
                 onChange={applySource}
@@ -680,7 +705,7 @@ export default function App() {
               />
             ) : (
               <TemplatesPane
-                className={mobileTab !== "source" ? "mobile-hidden" : ""}
+                className={mobileTab !== "source" && mobileTab !== "templates" ? "mobile-hidden" : ""}
                 style={{ flex: `0 0 ${colPct.source}%` }}
                 templates={doc.templateOrder}
                 active={activeSection}
@@ -711,7 +736,6 @@ export default function App() {
           onAddTemplate={createTemplateFromInsert}
           onRenameTemplate={renameTemplate}
           onSetTemplateColor={setTemplateColor}
-          onOpenTemplates={() => openLeftPane("templates")}
         />
         <ColumnResizer onResize={handleColumnResize("root", "preview")} />
         <PreviewPane
@@ -730,7 +754,7 @@ export default function App() {
           {errors.length} error{errors.length === 1 ? "" : "s"} · {warnings.length} warning{warnings.length === 1 ? "" : "s"}
         </span>
         <span>File System Access: {supportsFsAccess() ? "available" : "not available"}</span>
-        <span style={{ marginLeft: "auto" }}>Drop a .fh file anywhere to open</span>
+        <span className="statusbar-tip" style={{ marginLeft: "auto" }} key={tipIndex}>{TIPS[tipIndex]}</span>
       </footer>
 
       <div className="toasts">

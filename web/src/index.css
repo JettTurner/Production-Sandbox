@@ -619,42 +619,6 @@ html.electron .more-dropdown {
   font-weight: 500;
   padding: 4px 8px;
 }
-.sub-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elev);
-  flex: 0 0 auto;
-}
-.sub-head .title {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--muted);
-}
-.sub-head .right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.sub-head select {
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  padding: 3px 8px;
-  font-size: 12px;
-  outline: none;
-  cursor: pointer;
-}
-.sub-head select:focus {
-  border-color: var(--accent);
-}
-
 /* ---------- Designer add dropdown ---------- */
 .plus-dropdown {
   width: 230px;
@@ -1335,6 +1299,29 @@ html.electron .more-dropdown {
   height: 7px;
   border-radius: 50%;
 }
+/* Rotating tip on the right of the status bar; fades in and out each cycle.
+   Duration matches the TIPS interval (6s) so the out-fade lands as it swaps. */
+.statusbar .statusbar-tip {
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: tip-fade 6s ease-in-out;
+}
+@keyframes tip-fade {
+  0% {
+    opacity: 0;
+  }
+  5% {
+    opacity: 1;
+  }
+  95% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
 .statusbar .dot.ok {
   background: var(--green);
 }
@@ -1444,8 +1431,11 @@ html.electron .more-dropdown {
   .more-menu {
     display: inline-flex;
   }
-  .statusbar span:nth-child(3),
-  .statusbar span:nth-child(4) {
+  .statusbar span:nth-child(3) {
     display: none;
+  }
+  /* Keep the rotating tip visible on small screens (it truncates). */
+  .statusbar .statusbar-tip {
+    font-size: 11px;
   }
 }

@@ -16,7 +16,6 @@ interface RootDesignerPaneProps {
   onAddTemplate: (name: string) => void;
   onRenameTemplate: (oldName: string, newName: string) => void;
   onSetTemplateColor: (name: string, color: string) => void;
-  onOpenTemplates: () => void;
   style?: CSSProperties;
   className?: string;
 }
@@ -33,7 +32,6 @@ export default function RootDesignerPane({
   onAddTemplate,
   onRenameTemplate,
   onSetTemplateColor,
-  onOpenTemplates,
   style,
   className,
 }: RootDesignerPaneProps) {
@@ -71,19 +69,6 @@ export default function RootDesignerPane({
     <section className={`pane root-pane ${className ?? ""}`} style={style}>
       <div className="pane-head">
         <span className="title">Root Designer</span>
-        <div className="right">
-          <button
-            className="btn"
-            onClick={onOpenTemplates}
-            title="Manage templates"
-          >
-            Templates
-          </button>
-          <span style={{ fontSize: 11.5, color: "var(--muted)" }}>double-click to rename · drag to move · ＋ to add · double-click @insert to expand</span>
-        </div>
-      </div>
-      <div className="sub-head">
-        <span className="title">Name</span>
         <input
           className="name-input"
           value={name}
@@ -92,7 +77,6 @@ export default function RootDesignerPane({
           title="Name of this folder structure (writes the @name line)"
           spellCheck={false}
         />
-        <span className="title" style={{ marginLeft: 16 }}>Color</span>
         <ColorPicker
           value={templateColors["@root"] ?? "#bc8cff"}
           onChange={(c) => onSetTemplateColor("@root", c)}
