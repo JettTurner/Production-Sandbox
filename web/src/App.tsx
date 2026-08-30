@@ -10,6 +10,7 @@ import {
   DownloadIcon,
   FolderArrowIcon,
   FolderIcon,
+  MenuIcon,
   PlusIcon,
   SaveIcon,
 } from "./components/icons";
@@ -84,8 +85,10 @@ export default function App() {
   const [sourceOpen, setSourceOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<"source" | "root" | "preview">("root");
+  const [moreOpen, setMoreOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const baselineRef = useRef(DEFAULT_SOURCE);
+  const moreRef = useRef<HTMLDivElement>(null);
 
   // Keep the mobile tab bar in sync when the source editor is toggled from
   // inside the root designer: opening reveals the Source tab, closing while
@@ -525,6 +528,16 @@ export default function App() {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [dirty]);
 
+  // Close the mobile overflow menu when clicking outside it.
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [moreOpen]);
+
   const stats = countNodes(resolved.tree);
   const errors = parsed.issues.filter((i) => i.severity === "error");
   const warnings = parsed.issues.filter((i) => i.severity === "warning");
@@ -551,7 +564,7 @@ export default function App() {
         </div>
         <div className="spacer" />
         <div className="toolbar">
-          <select className="btn" style={{ padding: "6px 8px" }} value={sample} onChange={(e) => loadSample(e.target.value)}>
+          <select className="btn toolbar-secondary" style={{ padding: "6px 8px" }} value={sample} onChange={(e) => loadSample(e.target.value)}>
             <option value="">Load sample…</option>
             {SAMPLES.map((s) => (
               <option key={s.value} value={s.value}>
@@ -568,16 +581,54 @@ export default function App() {
           <button className="btn" onClick={saveFh} title="Save .fh file">
             <SaveIcon />
           </button>
-          <span style={{ width: 1, height: 24, background: "var(--border)" }} />
-          <button className="btn" onClick={copyStructure} title="Copy to clipboard">
+          <span className="toolbar-secondary" style={{ width: 1, height: 24, background: "var(--border)" }} />
+          <button className="btn toolbar-secondary" onClick={copyStructure} title="Copy to clipboard">
             <CopyIcon />
           </button>
-          <button className="btn" onClick={downloadZip} title="Download as zip">
+          <button className="btn toolbar-secondary" onClick={downloadZip} title="Download as zip">
             <DownloadIcon />
           </button>
-          <button className="btn success" onClick={createFolders} title="Create the folders on your disk (Chrome/Edge)">
+          <button className="btn success toolbar-secondary" onClick={createFolders} title="Create the folders on your disk (Chrome/Edge)">
             <FolderArrowIcon />
           </button>
+          <div className="more-menu" ref={moreRef}>
+            <button
+              className="btn"
+              onClick={() => setMoreOpen((v) => !v)}
+              title="More actions"
+              aria-expanded={moreOpen}
+            >
+              <MenuIcon />
+            </button>
+            {moreOpen && (
+              <div className="more-dropdown">
+                <div className="more-sample">
+                  <label className="more-label">Load sample…</label>
+                  <select value={sample} onChange={(e) => { loadSample(e.target.value); setMoreOpen(false); }}>
+                    <option value="">Choose a sample…</option>
+                    {SAMPLES.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="more-sep" />
+                <button className="more-item" onClick={() => { copyStructure(); setMoreOpen(false); }}>
+                  <CopyIcon />
+                  Copy to clipboard
+                </button>
+                <button className="more-item" onClick={() => { downloadZip(); setMoreOpen(false); }}>
+                  <DownloadIcon />
+                  Download as zip
+                </button>
+                <button className="more-item" onClick={() => { createFolders(); setMoreOpen(false); }}>
+                  <FolderArrowIcon />
+                  Create folders on disk
+                </button>
+              </div>
+            )}
+          </div>
           <input ref={fileRef} type="file" accept=".fh,.pbkstruct,.txt,text/plain" hidden onChange={openFromInput} />
         </div>
       </header>

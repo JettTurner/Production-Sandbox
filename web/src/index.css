@@ -126,6 +126,83 @@ html.electron .header a {
   gap: 8px;
 }
 
+/* Mobile overflow menu: hidden on desktop (actions live inline in the toolbar),
+   shown on small screens where the secondary actions are collapsed. */
+.more-menu {
+  position: relative;
+  display: none;
+}
+.more-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 120;
+  min-width: 210px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
+}
+.more-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+}
+.more-item:hover {
+  background: var(--bg-elev);
+}
+.more-item svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+.more-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 2px;
+}
+.more-sample {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px 4px;
+}
+.more-sample .more-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.more-sample select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+html.electron .more-menu,
+html.electron .more-dropdown {
+  -webkit-app-region: no-drag;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -1383,6 +1460,16 @@ html.electron .header a {
   .toolbar button,
   .toolbar select.btn {
     padding: 5px 7px;
+  }
+  /* On small screens keep only the core actions (New/Open/Save); the
+     sample-select, Copy, Download, and Create-folders move behind the
+     hamburger (More) menu so the header no longer wraps into a cramped
+     cluster. */
+  .toolbar-secondary {
+    display: none;
+  }
+  .more-menu {
+    display: inline-flex;
   }
   .statusbar span:nth-child(3),
   .statusbar span:nth-child(4) {
