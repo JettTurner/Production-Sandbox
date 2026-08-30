@@ -6,6 +6,7 @@ import SourcePane from "./components/panes/SourcePane";
 import TemplatesModal from "./components/TemplatesModal";
 import {
   BrandMarkIcon,
+  CodeIcon,
   CopyIcon,
   DownloadIcon,
   FolderArrowIcon,
@@ -116,12 +117,14 @@ export default function App() {
   // optional sidebar that steals its share equally from both.
   const evenSplit = useCallback(() => {
     const el = mainRef.current;
-    const sourceResizers = sourceOpen ? RESIZER_W : 0;
-    const usablePx = el && el.clientWidth > sourceResizers + 24
-      ? el.clientWidth - sourceResizers - 24
+    const resizers = sourceOpen ? RESIZER_W * 2 : RESIZER_W;
+    const usablePx = el && el.clientWidth > resizers + 24
+      ? el.clientWidth - resizers - 24
       : (el?.clientWidth ?? window.innerWidth);
     const usablePct = (usablePx / (el?.clientWidth ?? usablePx)) * 100;
-    const rootPct = sourceOpen ? usablePct / 4 : usablePct / 2;
+    // When the source sidebar is open all three columns share the space
+    // equidistantly; otherwise Root and Preview split it 50/50.
+    const rootPct = sourceOpen ? usablePct / 3 : usablePct / 2;
     setColPct({ source: sourceOpen ? rootPct : 0, root: rootPct, preview: 0 });
   }, [sourceOpen]);
 
@@ -642,7 +645,18 @@ export default function App() {
         <button className={`tab ${mobileTab === "preview" ? "active" : ""}`} onClick={() => setMobileTab("preview")}>Preview</button>
       </div>
 
-      <main className="main" ref={mainRef}>
+      <div className="app-body">
+        <button
+          className={`source-tab ${sourceOpen ? "active" : ""}`}
+          onClick={toggleSource}
+          title="Toggle the raw .fh source editor"
+          aria-pressed={sourceOpen}
+        >
+          <CodeIcon />
+          <span className="tab-label">Source</span>
+        </button>
+
+        <main className="main" ref={mainRef}>
         {sourceOpen && (
           <>
             <SourcePane
@@ -670,8 +684,6 @@ export default function App() {
           onAddTemplate={createTemplateFromInsert}
           onRenameTemplate={renameTemplate}
           onSetTemplateColor={setTemplateColor}
-          sourceOpen={sourceOpen}
-          onToggleSource={toggleSource}
           onOpenTemplates={() => setTemplatesOpen(true)}
         />
         <ColumnResizer onResize={handleColumnResize("root", "preview")} />

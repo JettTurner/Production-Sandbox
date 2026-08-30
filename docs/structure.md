@@ -127,11 +127,15 @@ Owns all shared state and wires the four column panes together.
   redo (skipped when focus is in INPUT/SELECT), beforeunload guard +
   `confirmDiscard()` gates on new/open/sample.
 - **Layout**: header (filename input with fixed `.fh` chip, templates button,
-  samples, save/zip/copy/disk buttons) → `<main>` with resizable columns:
+  samples, save/zip/copy/disk buttons) → a vertical "Source" tab pinned to the
+  screen's left edge (desktop) that toggles the raw `.fh` source sidebar →
+  `<main>` with resizable columns:
   optional Source sidebar | Root Designer pane | Preview pane.
   Templates open as a modal dialog (`TemplatesModal`).
   `ColumnResizer` handles sit between columns; last column flex-fills to the
   screen edge.
+  Opening the Source sidebar splits Source/Root/Preview equally; closing it
+  restores a 50/50 Root/Preview split.
 - Auto-selects the first template whenever the active template is missing.
 
 ### `web/src/lib/types.ts` — core data model
@@ -164,8 +168,9 @@ Owns all shared state and wires the four column panes together.
 - `resolveTree(root, templates)` → `{ tree, errors }`: expands every `@insert`
   by splicing the template's contents **in place** (no wrapper folder);
   detects circular inserts and missing templates as errors.
-- Also exports `countNodes` (preview stats), `treeToText`,
-  `computeMaxDepth`, `gradientColor` (depth-based name coloring).
+- Also exports `countNodes` (preview stats: folders/files/total, plus `maxDepth`
+  and `maxWidth` — deepest level count and widest branching point),
+  `treeToText`, `computeMaxDepth`, `gradientColor` (depth-based name coloring).
 
 ### `web/src/lib/treeEdit.ts` — immutable tree operations (designer edits)
 
@@ -254,7 +259,7 @@ X, Copy, Download, Upload, FolderArrow, Sparkle, Eraser, Pencil, Code.
 | Pane | Wraps | Notes |
 |---|---|---|
 | `SourcePane.tsx` | CodePane + issue list | collapsible sidebar, closed by default |
-| `RootDesignerPane.tsx` | name input + Designer + source toggle | edits `@name` + root tree; inline template expansion via expand button on `@insert` rows |
+| `RootDesignerPane.tsx` | name input + Designer | edits `@name` + root tree; inline template expansion via expand button on `@insert` rows |
 | `PreviewPane.tsx` | stats header + Preview | folders/files/total counts |
 
 All accept an optional `style` prop (flex sizing from App).

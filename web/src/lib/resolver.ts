@@ -58,19 +58,35 @@ function resolveNode(
 }
 
 /** Stats used by the preview header. */
-export function countNodes(tree: FsNode[]): { folders: number; files: number; total: number } {
+export interface TreeStats {
+  folders: number;
+  files: number;
+  total: number;
+  /** Deepest nesting measured in levels (root = 1); 0 when the tree is empty. */
+  maxDepth: number;
+  /** Most nodes on any single level — the tree's widest branching point; 0 when empty. */
+  maxWidth: number;
+}
+
+export function countNodes(tree: FsNode[]): TreeStats {
   let folders = 0;
   let files = 0;
-  const walk = (nodes: FsNode[]) => {
-    for (const n of nodes) {
+  let levels = 0;
+  let maxWidth = 0;
+  let queue: FsNode[] = [...tree];
+  while (queue.length) {
+    levels++;
+    maxWidth = Math.max(maxWidth, queue.length);
+    const next: FsNode[] = [];
+    for (const n of queue) {
       if (n.kind === "insert") continue;
       if (n.name.includes(".")) files++;
       else folders++;
-      walk(n.children);
+      next.push(...n.children);
     }
-  };
-  walk(tree);
-  return { folders, files, total: folders + files };
+    queue = next;
+  }
+  return { folders, files, total: folders + files, maxDepth: levels, maxWidth };
 }
 
 export function treeToText(tree: FsNode[], indent = 0): string[] {

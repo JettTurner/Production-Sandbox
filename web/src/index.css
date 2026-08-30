@@ -64,6 +64,54 @@ button {
   height: 100%;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+/* Side tab on the screen's left edge: a persistent affordance showing the raw
+   .fh source editor can be opened/closed. Label reads vertically, icon upright. */
+.source-tab {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 6px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-strong);
+  border-left: none;
+  border-radius: 0 10px 10px 0;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.source-tab:hover {
+  color: var(--text);
+  background: #2a313c;
+}
+.source-tab.active {
+  color: var(--accent);
+  background: var(--accent-weak);
+  border-color: var(--accent);
+}
+.source-tab svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+.source-tab .tab-label {
+  writing-mode: vertical-rl;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  user-select: none;
+}
+html.electron .source-tab {
+  -webkit-app-region: no-drag;
 }
 
 /* ---------- Header ---------- */
@@ -1387,6 +1435,9 @@ html.electron .more-dropdown {
     overflow: auto;
   }
   .col-resizer {
+    display: none;
+  }
+  .source-tab {
     display: none;
   }
   .main {

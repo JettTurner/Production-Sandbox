@@ -2,7 +2,6 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { FsNode } from "../../lib/types";
 import Designer from "../Designer";
-import { CodeIcon } from "../icons";
 import ColorPicker from "../ColorPicker";
 
 interface RootDesignerPaneProps {
@@ -17,8 +16,6 @@ interface RootDesignerPaneProps {
   onAddTemplate: (name: string) => void;
   onRenameTemplate: (oldName: string, newName: string) => void;
   onSetTemplateColor: (name: string, color: string) => void;
-  sourceOpen: boolean;
-  onToggleSource: () => void;
   onOpenTemplates: () => void;
   style?: CSSProperties;
   className?: string;
@@ -36,8 +33,6 @@ export default function RootDesignerPane({
   onAddTemplate,
   onRenameTemplate,
   onSetTemplateColor,
-  sourceOpen,
-  onToggleSource,
   onOpenTemplates,
   style,
   className,
@@ -83,13 +78,6 @@ export default function RootDesignerPane({
             title="Manage templates"
           >
             Templates
-          </button>
-          <button
-            className={`btn ${sourceOpen ? "active" : ""}`}
-            onClick={onToggleSource}
-            title="Toggle the raw .fh source editor"
-          >
-            <CodeIcon />
           </button>
           <span style={{ fontSize: 11.5, color: "var(--muted)" }}>double-click to rename · drag to move · ＋ to add · double-click @insert to expand</span>
         </div>
