@@ -130,13 +130,14 @@ Owns all shared state and wires the four column panes together.
   save/zip/copy/disk buttons) → a vertical `LeftRail` of tabs pinned to the
   screen's left edge (desktop) that swaps in content in the leftmost column →
   `<main>` with resizable columns:
-  leftmost column (Source or Templates, driven by the rail) | Root Designer
-  pane | Preview pane. Templates are edited in the leftmost column (no modal);
-  on mobile a Templates tab sits next to Source in the `.mobile-tabs` bar.
-  `ColumnResizer` handles sit between columns; last column flex-fills to the
-  screen edge. Opening the leftmost column splits its content / Root / Preview
-  equally; closing it restores a 50/50 Root/Preview split. The status bar's
-  right side shows a rotating tip (`TIPS`) that cycles on a timer.
+  leftmost column (driven by the rail: Root | Source | Templates) | Preview
+  pane. Root, Source, and Templates are all tabs in the rail (no modal, no
+  separate Root column) so the editor is always two columns. On mobile the
+  `.mobile-tabs` bar picks the same panels (Root | Source | Templates |
+  Preview). `ColumnResizer` sits between the two columns; Preview flex-fills to
+  the screen edge. The left column and Preview split the usable space 50/50.
+  The status bar's right side shows a rotating tip (`TIPS`) that cycles on a
+  timer.
 - Auto-selects the first template whenever the active template is missing.
 
 ### `web/src/lib/types.ts` — core data model
@@ -262,14 +263,14 @@ X, Copy, Download, Upload, FolderArrow, Sparkle, Eraser, Pencil, Code, Menu.
 
 | Pane | Wraps | Notes |
 |---|---|---|
-| `SourcePane.tsx` | CodePane + issue list | the Source tab of the leftmost column; closed by default |
+| `RootDesignerPane.tsx` | name input + color + Designer | single consolidated header (name `@name` + `@root` color) + root tree; the Root tab of the leftmost column |
+| `SourcePane.tsx` | CodePane + issue list | the Source tab of the leftmost column |
 | `TemplatesPane.tsx` | SectionPicker + Designer | the Templates tab of the leftmost column |
-| `RootDesignerPane.tsx` | name input + color + Designer | single consolidated header (name `@name` + `@root` color) + root tree; inline template expansion via expand button on `@insert` rows |
-| `PreviewPane.tsx` | stats header + Preview | folders/files/total counts |
+| `PreviewPane.tsx` | stats header + Preview | folders/files/total counts; the right, flex-fill column |
 
-The leftmost column shows whichever pane the active `LeftRail` tab selects
-(`SourcePane` or `TemplatesPane`); each keeps its own default header. All pane
-components accept an optional `style` prop (flex sizing from App).
+The leftmost column is the root/source/templates editor selected by the active
+`LeftRail` tab; each pane keeps its own default header. All pane components
+accept an optional `style` prop (flex sizing from App).
 
 ---
 

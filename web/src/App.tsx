@@ -65,7 +65,7 @@ interface Toast {
   msg: string;
 }
 
-type LeftTab = "source" | "templates";
+type LeftTab = "root" | "source" | "templates";
 
 // Rotating status-bar tips; cycles on a timer so the footer stays informative
 // without stealing space from the panes.
@@ -99,7 +99,7 @@ export default function App() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [sample, setSample] = useState("");
-  const [leftPane, setLeftPane] = useState<LeftTab | null>(null);
+  const [leftPane, setLeftPane] = useState<LeftTab>("root");
   const [mobileTab, setMobileTab] = useState<"source" | "templates" | "root" | "preview">("root");
   const [moreOpen, setMoreOpen] = useState(false);
   const [tipIndex, setTipIndex] = useState(0);
@@ -107,59 +107,44 @@ export default function App() {
   const baselineRef = useRef(DEFAULT_SOURCE);
   const moreRef = useRef<HTMLDivElement>(null);
 
-  // The leftmost column shows whichever panel the vertical rail tab maps to. On
-  // mobile the Source / Templates tabs both drive the leftmost column, so it is
-  // visible for either. Opening it reveals that mobile tab so a pane is visible.
-  const leftOpen = leftPane !== null;
-  const mobileLeftTab = (t: "source" | "templates" | "root" | "preview") =>
-    t === "source" || t === "templates";
-  const openLeftPane = useCallback((tab: LeftTab) => {
+  // The leftmost column shows whichever panel the vertical rail tab maps to
+  // (Root / Source / Templates). Only one column + Preview => two columns; the
+  // rail tab simply switches which panel occupies it. On mobile the Source /
+  // Templates / Root tabs pick the panel, and Preview is its own tab.
+  const selectLeftPane = useCallback((tab: LeftTab) => {
     setLeftPane(tab);
     setMobileTab(tab);
   }, []);
-  const toggleLeftPane = useCallback((tab: LeftTab) => {
-    if (leftPane === tab) {
-      setLeftPane(null);
-      setMobileTab((t) => (mobileLeftTab(t) ? "root" : t));
-    } else {
-      setLeftPane(tab);
-      setMobileTab(tab);
-    }
-  }, [leftPane]);
 
   const leftPanels: { id: LeftTab; icon: ReactNode; label: string }[] = [
+    { id: "root", icon: <FolderIcon />, label: "Root" },
     { id: "source", icon: <CodeIcon />, label: "Source" },
     { id: "templates", icon: <SparkleIcon />, label: "Templates" },
   ];
 
-  type PaneId = "source" | "root" | "preview";
-  const MIN_PCT = 10;
-  const MAX_PCT = 60;
+  type PaneId = "left" | "preview";
+  const MIN_PCT = 20;
+  const MAX_PCT = 70;
   const RESIZER_W = 12;
   const mainRef = useRef<HTMLElement>(null);
   const [colPct, setColPct] = useState<Record<PaneId, number>>({
-    source: 0,
-    root: 50,
+    left: 50,
     preview: 0, // preview is flex-fill; not stored
   });
 
-  // Root and Preview always split the usable space 50/50. Source is an
-  // optional sidebar that steals its share equally from both.
+  // The left column and Preview split the usable space 50/50.
   const evenSplit = useCallback(() => {
     const el = mainRef.current;
     const cs = el ? getComputedStyle(el) : null;
     const padL = parseFloat(cs?.paddingLeft ?? "0") || 0;
     const padR = parseFloat(cs?.paddingRight ?? "0") || 0;
-    const resizers = leftOpen ? RESIZER_W * 2 : RESIZER_W;
+    const resizers = RESIZER_W;
     const usablePx = el && el.clientWidth > resizers + padL + padR
       ? el.clientWidth - resizers - padL - padR
       : (el?.clientWidth ?? window.innerWidth);
     const usablePct = (usablePx / (el?.clientWidth ?? usablePx)) * 100;
-    // When the leftmost column is open all three columns share the space
-    // equidistantly; otherwise Root and Preview split it 50/50.
-    const rootPct = leftOpen ? usablePct / 3 : usablePct / 2;
-    setColPct({ source: leftOpen ? rootPct : 0, root: rootPct, preview: 0 });
-  }, [leftOpen]);
+    setColPct({ left: usablePct / 2, preview: 0 });
+  }, []);
 
   useEffect(() => {
     evenSplit();
@@ -677,74 +662,94 @@ export default function App() {
 
       <div className="mobile-tabs">
         <button
+          className={`tab ${mobileTab === "root" ? "active" : ""}`}
+          onClick={() => selectLeftPane("root")}
+        >Root</button>
+        <button
           className={`tab ${mobileTab === "source" ? "active" : ""}`}
-          onClick={() => openLeftPane("source")}
+          onClick={() => selectLeftPane("source")}
         >Source</button>
         <button
           className={`tab ${mobileTab === "templates" ? "active" : ""}`}
-          onClick={() => openLeftPane("templates")}
+          onClick={() => selectLeftPane("templates")}
         >Templates</button>
-        <button className={`tab ${mobileTab === "root" ? "active" : ""}`} onClick={() => setMobileTab("root")}>Root</button>
         <button className={`tab ${mobileTab === "preview" ? "active" : ""}`} onClick={() => setMobileTab("preview")}>Preview</button>
       </div>
 
       <div className="app-body">
-        <LeftRail tabs={leftPanels} active={leftPane} onToggle={toggleLeftPane} />
+        <LeftRail tabs={leftPanels} active={leftPane} onToggle={selectLeftPane} />
 
         <main className="main" ref={mainRef}>
-        {leftOpen && (
-          <>
-            {leftPane === "source" ? (
-              <SourcePane
-                className={mobileTab !== "source" && mobileTab !== "templates" ? "mobile-hidden" : ""}
-                style={{ flex: `0 0 ${colPct.source}%` }}
-                source={source}
-                onChange={applySource}
-                issues={parsed.issues}
-                hasErrors={errors.length > 0}
-              />
-            ) : (
-              <TemplatesPane
-                className={mobileTab !== "source" && mobileTab !== "templates" ? "mobile-hidden" : ""}
-                style={{ flex: `0 0 ${colPct.source}%` }}
-                templates={doc.templateOrder}
-                active={activeSection}
-                tree={activeSection ? doc.templates[activeSection] ?? [] : []}
-                templateColors={doc.templateColors}
-                onSelect={setActiveSection}
-                onAdd={addTemplate}
-                onRename={renameTemplate}
-                onDelete={deleteTemplate}
-                onSetTemplateColor={setTemplateColor}
-                onNodesChange={handleTemplateChange}
-              />
-            )}
-            <ColumnResizer onResize={handleColumnResize("source", "root")} />
-          </>
-        )}
-        <RootDesignerPane
-          className={mobileTab !== "root" ? "mobile-hidden" : ""}
-          style={{ flex: `0 0 ${colPct.root}%` }}
-          name={doc.name}
-          onNameChange={setDocName}
-          tree={doc.root}
-          templates={doc.templateOrder}
-          templateMap={doc.templates}
-          templateColors={doc.templateColors}
-          onNodesChange={handleRootChange}
-          onTemplateNodesChange={handleTemplateNodesChange}
-          onAddTemplate={createTemplateFromInsert}
-          onRenameTemplate={renameTemplate}
-          onSetTemplateColor={setTemplateColor}
-        />
-        <ColumnResizer onResize={handleColumnResize("root", "preview")} />
-        <PreviewPane
-          className={mobileTab !== "preview" ? "mobile-hidden" : ""}
-          style={{ flex: "1 1 0" }}
-          stats={stats}
-          tree={resolved.tree}
-          errors={resolved.errors}
-        />
+          {(() => {
+            const hiddenCls = mobileTab === "preview" ? "mobile-hidden" : "";
+            const flex = `0 0 ${colPct.left}%`;
+            const resizer = (
+              <ColumnResizer onResize={handleColumnResize("left", "preview")} />
+            );
+            if (leftPane === "root") {
+              return (
+                <>
+                  <RootDesignerPane
+                    className={hiddenCls}
+                    style={{ flex }}
+                    name={doc.name}
+                    onNameChange={setDocName}
+                    tree={doc.root}
+                    templates={doc.templateOrder}
+                    templateMap={doc.templates}
+                    templateColors={doc.templateColors}
+                    onNodesChange={handleRootChange}
+                    onTemplateNodesChange={handleTemplateNodesChange}
+                    onAddTemplate={createTemplateFromInsert}
+                    onRenameTemplate={renameTemplate}
+                    onSetTemplateColor={setTemplateColor}
+                  />
+                  {resizer}
+                </>
+              );
+            }
+            if (leftPane === "source") {
+              return (
+                <>
+                  <SourcePane
+                    className={hiddenCls}
+                    style={{ flex }}
+                    source={source}
+                    onChange={applySource}
+                    issues={parsed.issues}
+                    hasErrors={errors.length > 0}
+                  />
+                  {resizer}
+                </>
+              );
+            }
+            return (
+              <>
+                <TemplatesPane
+                  className={hiddenCls}
+                  style={{ flex }}
+                  templates={doc.templateOrder}
+                  active={activeSection}
+                  tree={activeSection ? doc.templates[activeSection] ?? [] : []}
+                  templateColors={doc.templateColors}
+                  onSelect={setActiveSection}
+                  onAdd={addTemplate}
+                  onRename={renameTemplate}
+                  onDelete={deleteTemplate}
+                  onSetTemplateColor={setTemplateColor}
+                  onNodesChange={handleTemplateChange}
+                />
+                {resizer}
+              </>
+            );
+          })()}
+          <PreviewPane
+            className={mobileTab !== "preview" ? "mobile-hidden" : ""}
+            style={{ flex: "1 1 0" }}
+            stats={stats}
+            tree={resolved.tree}
+            errors={resolved.errors}
+          />
         </main>
       </div>
 
