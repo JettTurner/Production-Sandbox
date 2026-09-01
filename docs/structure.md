@@ -130,11 +130,12 @@ Owns all shared state and wires the four column panes together.
   save/zip/copy/disk buttons) → a vertical `LeftRail` of tabs pinned to the
   screen's left edge (desktop) that swaps in content in the leftmost column →
   `<main>` with resizable columns:
-  leftmost column (driven by the rail: Root | Source | Templates) | Preview
-  pane. Root, Source, and Templates are all tabs in the rail (no modal, no
+  leftmost column (driven by the rail: Root | Templates | Source) | Preview
+  pane. Root, Templates, and Source are all tabs in the rail (no modal, no
   separate Root column) so the editor is always two columns. On mobile the
-  `.mobile-tabs` bar picks the same panels (Root | Source | Templates |
-  Preview). `ColumnResizer` sits between the two columns; Preview flex-fills to
+  `.mobile-tabs` bar picks the same panels in the same order (Root | Templates |
+  Source | Preview); desktop rail and mobile bar both honor the 1/2/3 number-key
+  shortcuts. `ColumnResizer` sits between the two columns; Preview flex-fills to
   the screen edge. The left column and Preview split the usable space 50/50.
   The status bar's right side shows a rotating tip (`TIPS`) that cycles on a
   timer.

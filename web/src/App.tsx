@@ -67,6 +67,13 @@ interface Toast {
 
 type LeftTab = "root" | "source" | "templates";
 
+// Number-key shortcuts for the left-panel tabs (1/2/3 = Root/Templates/Source).
+const LEFT_TAB_KEYS: Record<string, LeftTab> = {
+  "1": "root",
+  "2": "templates",
+  "3": "source",
+};
+
 // Rotating status-bar tips; cycles on a timer so the footer stays informative
 // without stealing space from the panes.
 const TIPS = [
@@ -118,8 +125,8 @@ export default function App() {
 
   const leftPanels: { id: LeftTab; icon: ReactNode; label: string }[] = [
     { id: "root", icon: <FolderIcon />, label: "Root" },
-    { id: "source", icon: <CodeIcon />, label: "Source" },
     { id: "templates", icon: <SparkleIcon />, label: "Templates" },
+    { id: "source", icon: <CodeIcon />, label: "Source" },
   ];
 
   type PaneId = "left" | "preview";
@@ -526,6 +533,16 @@ export default function App() {
           e.preventDefault();
           undo();
         }
+      } else if (!mod && !e.altKey) {
+        // 1/2/3 → Root/Templates/Source (skip when typing in an editable).
+        const editable = target &&
+          (target.tagName === "INPUT" || target.tagName === "SELECT" ||
+            target.tagName === "TEXTAREA" || target.isContentEditable);
+        const tab = editable ? undefined : LEFT_TAB_KEYS[key];
+        if (tab) {
+          e.preventDefault();
+          selectLeftPane(tab);
+        }
       }
     };
     window.addEventListener("dragover", onOver);
@@ -536,7 +553,7 @@ export default function App() {
       window.removeEventListener("drop", onDrop);
       window.removeEventListener("keydown", onKey);
     };
-  }, [handleOpenFile, saveFh, undo, redo]);
+  }, [handleOpenFile, saveFh, undo, redo, selectLeftPane]);
 
   // Warn before leaving the page with unsaved work.
   useEffect(() => {
@@ -666,13 +683,13 @@ export default function App() {
           onClick={() => selectLeftPane("root")}
         >Root</button>
         <button
-          className={`tab ${mobileTab === "source" ? "active" : ""}`}
-          onClick={() => selectLeftPane("source")}
-        >Source</button>
-        <button
           className={`tab ${mobileTab === "templates" ? "active" : ""}`}
           onClick={() => selectLeftPane("templates")}
         >Templates</button>
+        <button
+          className={`tab ${mobileTab === "source" ? "active" : ""}`}
+          onClick={() => selectLeftPane("source")}
+        >Source</button>
         <button className={`tab ${mobileTab === "preview" ? "active" : ""}`} onClick={() => setMobileTab("preview")}>Preview</button>
       </div>
 
