@@ -2239,6 +2239,9 @@ fieldset.field .field-label {
 .brick.big .brick-name {
   font-size: 14px;
 }
+.drop-hint.active {
+  background: var(--accent-weak);
+}
 .drop-hint {
   display: grid;
   place-items: center;

@@ -59,6 +59,8 @@ export default function BlocksView({
   const [menu, setMenu] = useState<{ parentId: string | null; anchor: HTMLElement } | null>(null);
   const [drag, setDrag] = useState<string | null>(null);
   const [drop, setDrop] = useState<{ id: string; pos: DropPos } | null>(null);
+  // The card the pointer is over while dragging: it shows a "Drop it here" zone.
+  const [overCard, setOverCard] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
 
@@ -130,6 +132,7 @@ export default function BlocksView({
   const endDrag = () => {
     setDrag(null);
     setDrop(null);
+    setOverCard(null);
   };
   const draggingCard = !!drag && here.some((n) => n.id === drag);
   const accepts = (e: React.DragEvent) => !!drag || e.dataTransfer.types.includes(TEMPLATE_MIME);
@@ -371,7 +374,27 @@ export default function BlocksView({
             );
           }
           return (
-            <section key={node.id} className={`card ${dropClass(node.id)}`} {...dragProps(node)} {...dropProps(node.id, "card")}>
+            <section
+              key={node.id}
+              className={`card ${dropClass(node.id)}`}
+              {...dragProps(node)}
+              {...dropProps(node.id, "card")}
+              onDragEnterCapture={(e) => {
+                if (accepts(e) && drag !== node.id && overCard !== node.id) setOverCard(node.id);
+              }}
+              onDragOverCapture={(e) => {
+                if (accepts(e) && drag !== node.id && overCard !== node.id) setOverCard(node.id);
+              }}
+              onDragLeave={(e) => {
+                // Judge by position: relatedTarget is unreliable during a drag.
+                const r = e.currentTarget.getBoundingClientRect();
+                const inside = e.clientX > r.left && e.clientX < r.right && e.clientY > r.top && e.clientY < r.bottom;
+                if (!inside) {
+                  setOverCard((c) => (c === node.id ? null : c));
+                  setDrop(null);
+                }
+              }}
+            >
               <div className="card-head">
                 <span className="node-icon"><FolderIcon size={18} /></span>
                 {isEditing ? (
@@ -381,13 +404,25 @@ export default function BlocksView({
                     {node.name}
                   </button>
                 )}
+                {/* Add lives with the other card tools: shown on hover or keyboard focus, not as a permanent row. */}
+                <button
+                  type="button"
+                  className="icon-btn"
+                  title={`Add something inside ${node.name}`}
+                  aria-label={`Add inside ${node.name}`}
+                  onClick={(e) => openMenu(node.id, e)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <PlusIcon />
+                </button>
                 {tools(node)}
               </div>
               {node.children.map((child) => itemRow(node, child))}
-              {drop?.id === node.id && drop.pos === "into" && <div className="drop-hint">Drop it here</div>}
-              <button type="button" className="add-dashed" onClick={(e) => openMenu(node.id, e)} onMouseDown={(e) => e.stopPropagation()}>
-                <PlusIcon /> Add
-              </button>
+              {overCard === node.id && (
+                <div className={`drop-hint ${drop?.id === node.id && drop.pos === "into" ? "active" : ""}`} {...dropProps(node.id, "into")}>
+                  Drop it here
+                </div>
+              )}
             </section>
           );
         })}
