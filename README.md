@@ -20,6 +20,7 @@ Open the printed URL (default `http://localhost:5173`).
 ```bash
 npm run build      # production build -> web/dist/
 npm run verify     # regression suite: parser, resolver, validation, tree edits, disk writes
+npm run test:ui    # the built app driven in a real browser (needs Chrome or Edge installed)
 npm run typecheck
 ```
 
@@ -43,7 +44,7 @@ A **block** is a reusable set of folders. In the `.fh` file a block is a `@templ
 
 | View | Best for |
 | --- | --- |
-| **Blocks** | Getting started and seeing the shape. The folder you are in is a board of cards, one per folder; blocks are colored bricks you drag in. Click a folder's name to go into it. |
+| **Blocks** | Getting started and seeing the shape. Folders are boxes inside boxes, as deep as the structure goes; only reusable blocks are drawn as colored bricks you drag in. Click a folder's name to go into it; the path at the top leads back. |
 | **Columns** | Big, deep structures. One column per level, like a file browser, so you only ever read one short list. Selecting a block shows what is inside it. |
 | **List** | Seeing everything at once and bulk rearranging: the whole section as one indented list, with drag and drop and Expand / Collapse all. |
 
@@ -65,7 +66,12 @@ A **block** is a reusable set of folders. In the `.fh` file a block is a `@templ
 | **Open / Save** | `Ctrl+O` opens, `Ctrl+S` saves straight back to the file you opened (it only asks where the first time), `Ctrl+Shift+S` saves a copy. Dropping a `.fh` file on the window opens it. Where the browser has no file pickers, Save downloads the file instead. |
 | **Expand / collapse all** | In List view (folders only, or folders and blocks), and above the preview. |
 | **Undo / redo** | `Ctrl+Z` / `Ctrl+Y`, 100 steps. |
-| **Samples** | Under the `⋯` menu. |
+| **Fill-in names** | A name with a blank in braces, such as `{Client}` or `{yymmdd}_{Project}`, asks for the words when you create folders. `{date}`, `{year}`, `{yy}`, `{month}`, `{day}` and `{yymmdd}` fill themselves in from today's date. |
+| **Import a folder** | `⋯` → Import a folder, or from New: reads a folder that already exists and turns it into a structure you can edit. *Chrome, Edge, or the desktop app.* |
+| **Picks up where you left off** | The app reopens your last structure, and recent files are listed for reopening. |
+| **Path back** | Going into a block from anywhere shows the way back at the top of the editor. |
+| **Light / dark theme** | Under the `⋯` menu; remembered. The desktop title bar stays dark. |
+| **Samples, What's new** | Under the `⋯` menu. |
 
 ---
 
@@ -149,9 +155,10 @@ Sets the version in `web\package.json` (the one place it is kept), `web\package-
 web/
 ├── public/samples/          # sample .fh files (bundled)
 ├── scripts/verify.ts        # regression suite (npm run verify)
+├── scripts/ui-check.mjs     # browser checks of the built app (npm run test:ui)
 ├── electron/main.cjs        # desktop shell
 └── src/
-    ├── lib/                 # format engine: parser, serializer, resolver, validate, ids, treeEdit, kit, export, folders
+    ├── lib/                 # format engine: parser, serializer, resolver, validate, ids, treeEdit, kit, blanks, dnd, session, export, folders
     ├── hooks/               # useFhDocument: source text, parsed doc, undo/redo, saved state
     ├── components/          # Sidebar, EditorPane, BlocksView, ColumnsView, Designer (List), NewDialog, OutputPane, …
     └── App.tsx              # shell: layout, file I/O, template operations

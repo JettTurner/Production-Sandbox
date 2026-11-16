@@ -343,7 +343,7 @@ export default function BlocksView({
       <div
         key={node.id}
         className={`brick ${top ? "big" : ""} ${stateClass(node.id)}`}
-        style={{ borderColor: color, color }}
+        style={{ "--c": color } as React.CSSProperties}
         tabIndex={0}
         data-nav={top ? "card" : "item"}
         data-id={node.id}

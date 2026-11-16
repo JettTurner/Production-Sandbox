@@ -24,6 +24,7 @@ npm run dev        # dev server :5173
 npm run build      # tsc -b && vite build
 npm run typecheck  # tsc -b --noEmit
 npm run verify     # regression suite (parser, resolver, validation, ids, treeEdit, disk writes)
+npm run test:ui    # browser checks of the built app (run npm run build first)
 ```
 
 After code changes: run `npm run typecheck`, `npm run build`, and

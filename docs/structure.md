@@ -113,11 +113,12 @@ name and path validated (`lib/validate.ts`).
     │       └── office-directory.fh
     ├── scripts/
     │   ├── verify.ts          ← headless regression suite (npm run verify)
+    │   ├── ui-check.mjs       ← the built app driven in a browser (npm run test:ui)
     │   └── make-icon.mjs      ← icon SVG → build/icon.ico + public/icon.png (npm run icons)
     └── src/
         ├── main.tsx           ← React bootstrap (mounts <App/>; adds html.electron)
         ├── App.tsx            ← application shell: layout, file I/O, template operations
-        ├── index.css          ← ALL styling (single stylesheet, dark theme)
+        ├── index.css          ← ALL styling (single stylesheet, dark + light themes)
         ├── vite-env.d.ts      ← Vite client types + File System Access API typings
         ├── hooks/             ← useFhDocument (document state)
         ├── components/        ← UI (see below)
@@ -246,6 +247,31 @@ All return new trees; never mutate.
 - `starterBlocks()` — the ready-made blocks offered in the sidebar;
   `uniqueTemplateName` avoids name clashes when one is added.
 
+### `web/src/lib/blanks.ts` — fill-in names
+
+- `findBlanks(tree)` — the `{Name}` blanks used in a tree, in order.
+- `dateBlanks(now)` — the blanks that fill themselves in: `date`, `year`,
+  `yy`, `month`, `day`, `yymmdd`. `usesDateBlanks(tree)` reports whether any
+  are present.
+- `fillBlanks(tree, values, now)` — the tree with blanks replaced; runs
+  before `planTree`, so the filled names are what gets validated and written.
+
+### `web/src/lib/dnd.ts` — shared drag and keyboard rules
+
+- `TEMPLATE_MIME` (a block dragged from the sidebar), `NODE_MIME` (something
+  being moved).
+- `dropZone(event, kind)` — before / inside / after, from the pointer
+  position, for a row, a folder or a card.
+- `keyAction(event)` — the one mapping from keys to actions (rename, delete,
+  move, reorder) used by all three views.
+
+### `web/src/lib/session.ts` — what the app remembers
+
+- `loadSession` / `saveSession` — the open structure, in localStorage, so the
+  app reopens where it was. `isFirstRun` decides whether to greet with New.
+- `listRecent`, `rememberFile`, `forgetFile` — recent file handles in
+  IndexedDB; `hasAccess(handle, ask)` re-checks permission before reopening.
+
 ### `web/src/lib/export.ts` — files in and out
 
 - `zipTree(tree)` — planned tree → JSZip blob of empty folders/files.
@@ -268,7 +294,9 @@ All return new trees; never mutate.
 | File | Role |
 | --- | --- |
 | `Sidebar.tsx` | Left pane. Root plus the template list: color dot, name, `N×` use count (or "unused"), filter (7+ templates), new-template input. Template rows are drag sources (`TEMPLATE_MIME`). |
-| `BlocksView.tsx` | Blocks view: the current folder as a board of cards (one per folder, listing its contents); blocks are colored bricks; cards accept blocks dragged from the sidebar; click a folder name to go into it. Starts inside the top folder when there is only one. |
+| `BlocksView.tsx` | Blocks view: the current folder as a board of cards (one per folder, listing its contents); blocks are colored bricks; cards accept blocks dragged from the sidebar; click a folder name to go into it. Starts inside the top folder when there is only one. Folders render recursively as boxes inside boxes (`.card` at the top level, `.subcard` below); only inserts are bricks. Add shows on hover or while dragging. On touch, Move then a tap places an item. |
+| `Crumbs.tsx` | The path at the top of the editor. In Columns and Blocks it is the path inside the section; after going into a block it starts with the way back (`origins` / `onBackTo` in `ViewProps`, kept in `App`). |
+| `WhatsNewDialog.tsx` | Shows `CHANGELOG.md` (imported raw at build time) and the app version. |
 | `ColumnsView.tsx` | Columns view: one column per level. Selecting a folder opens its children in the next column; selecting a block opens the block's own contents (edits there change the block everywhere). Each column knows which tree it edits (root or a block). Exports the `ViewProps` shared with `BlocksView`. |
 | `NewDialog.tsx` | The New dialog ("start from a kit"): three steps with a live preview; produces `.fh` text via `lib/kit.ts`. Also offers Blank and the bundled examples. |
 | *(all three views)* | Share drag types `TEMPLATE_MIME` (a block from the sidebar) and `NODE_MIME` (something being moved), the `reveal` prop (Find asks a view to show a node), and the rename / move helpers in `lib/treeEdit.ts`. |
@@ -290,7 +318,16 @@ All return new trees; never mutate.
 - ≤ 860px: one pane at a time, chosen by `.app[data-tab]`, with a bottom tab
   bar; rows grow to touch size and the selected row's actions move onto their
   own line.
-- Colors are CSS variables at the top of the file.
+- Colors are CSS variables at the top of the file. `html[data-theme="light"]`
+  repaints the same variables; `App` sets the attribute and remembers the
+  choice. No rule below the variable blocks uses a literal color.
+- Block colors: the element sets `--c` inline. Borders use `--c`; text uses
+  `--ink-c`, which the light theme mixes toward black.
+- Order: base rules by area, then one block of responsive rules at the end
+  (≤ 1180px, ≤ 860px, touch). Put new media rules there, not beside the base
+  rule.
+- The Electron title-bar overlay color is set in `electron/main.cjs` and
+  stays dark in both themes.
 
 ---
 
@@ -312,6 +349,12 @@ Covers:
 
 Prints `ALL CHECKS PASSED` on success.
 
+`web/scripts/ui-check.mjs`, run by `npm run test:ui`, builds nothing itself:
+run `npm run build` first. It serves `dist/`, opens it in an installed Chrome
+or Edge through `playwright-core` (`FH_BROWSER=chrome|msedge`), and checks
+the three views, drag and keyboard editing, Find, the New and Create dialogs,
+fill-in names, the path back and the phone layout.
+
 ## Commands (run inside `web/`)
 
 ```
@@ -320,6 +363,7 @@ npm run build             # tsc -b && vite build
 npm run preview           # serve the production build
 npm run typecheck         # tsc -b --noEmit
 npm run verify            # regression suite
+npm run test:ui           # browser checks of the built app
 npm run electron:preview  # npm run build, then open dist/ in a plain Electron shell
 npm run electron:package  # electron-builder --dir (default output: web/release)
 ```

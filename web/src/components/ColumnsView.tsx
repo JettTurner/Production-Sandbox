@@ -290,7 +290,7 @@ export default function ColumnsView({
             <section
               key={`${col}:${c.owner.kind === "template" ? c.owner.name : "root"}:${c.parentId ?? ""}`}
               className={`column ${dropCol === col ? "drop" : ""} ${block ? "in-block" : ""}`}
-              style={block ? ({ "--block-color": colors[block] ?? DEFAULT_COLOR } as React.CSSProperties) : undefined}
+              style={block ? ({ "--c": colors[block] ?? DEFAULT_COLOR } as React.CSSProperties) : undefined}
               aria-label={c.title}
               onDragOver={(e) => {
                 const moving = drag && drag.owner === ownerKey(c.owner);
@@ -353,7 +353,7 @@ export default function ColumnsView({
                         setDrag({ id: node.id, owner: ownerKey(c.owner) });
                       }}
                       onDragEnd={endDrag}
-                      style={color ? { borderColor: color } : undefined}
+                      style={color ? ({ "--c": color } as React.CSSProperties) : undefined}
                       role="option"
                       aria-selected={isSel}
                       tabIndex={isSel || (!sel[col] && at === 0) ? 0 : -1}
@@ -402,7 +402,7 @@ export default function ColumnsView({
                       title={isInsert ? `Block ${node.name}. Double-click to edit the block.` : node.name}
                     >
                       <div className="col-row-main">
-                        <span className="node-icon" style={color ? { color } : undefined}>
+                        <span className="node-icon">
                           {isInsert ? <TemplatesIcon /> : isFile ? <FileIcon /> : <FolderIcon />}
                         </span>
                         {isEditing ? (
@@ -413,7 +413,7 @@ export default function ColumnsView({
                             onCancel={() => setEditing(null)}
                           />
                         ) : (
-                          <span className="name" style={color ? { color } : undefined}>{node.name}</span>
+                          <span className="name">{node.name}</span>
                         )}
                         {opens && (
                           <span className="more">

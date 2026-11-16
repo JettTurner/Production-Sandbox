@@ -227,7 +227,8 @@ try {
   // ---- theme and what's new ----
   await page.click('[aria-label="More actions"]');
   await page.click('.more-item:has-text("Light theme")');
-  check((await page.evaluate(() => document.documentElement.dataset.theme)) === "light", "light theme can be switched on");
+  const lightBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  check((await page.evaluate(() => document.documentElement.dataset.theme)) === "light" && lightBg === "rgb(243, 242, 238)", "light theme repaints the app");
   await page.click('[aria-label="More actions"]');
   await page.click('.more-item:has-text("Dark theme")');
   await page.click('[aria-label="More actions"]');

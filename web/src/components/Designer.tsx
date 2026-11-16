@@ -349,7 +349,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
           >
             <GripIcon />
           </span>
-          <span className={`node-icon ${node.kind === "folder" ? "folder" : "insert"}`} style={insertColor ? { color: insertColor } : undefined}>
+          <span className={`node-icon ${node.kind === "folder" ? "folder" : "insert"}`} style={insertColor ? ({ "--c": insertColor } as React.CSSProperties) : undefined}>
             {node.kind === "folder" ? (isFile ? <FileIcon /> : <FolderIcon />) : <CopyIcon />}
           </span>
 
@@ -362,7 +362,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
                   onChange={(e) => onNodesChange(updateName(nodes, node.id, e.target.value))}
                   onDragOver={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
-                  style={insertColor ? { color: insertColor, borderColor: insertColor } : undefined}
+                  style={insertColor ? ({ "--c": insertColor } as React.CSSProperties) : undefined}
                 >
                   {templates.length ? (
                     templates.map((t) => (
