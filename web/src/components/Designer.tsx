@@ -3,8 +3,9 @@ import { createPortal } from "react-dom";
 import type { FsNode } from "../lib/types";
 import { isFileNode } from "../lib/types";
 import { cloneWithNewIds } from "../lib/ids";
-import { dropZone, keyAction, TEMPLATE_MIME } from "../lib/dnd";
-import { cleanTemplateName, insertChild, insertRelative, makeFile, makeFolder, makeInsert, moveNode, removeNode, renamedNode } from "../lib/treeEdit";
+import { clickSelect, dragBadge, dropZone, keyAction, noSelection, TEMPLATE_MIME, wantsMulti } from "../lib/dnd";
+import type { Selection } from "../lib/dnd";
+import { cleanTemplateName, duplicateNodes, insertChild, insertRelative, makeFile, makeFolder, makeInsert, moveNodes, removeNode, removeNodes, renamedNode } from "../lib/treeEdit";
 import { ChevronIcon, CopyIcon, FileIcon, FolderIcon, GripIcon, PlusChildIcon, PlusIcon, XIcon } from "./icons";
 import ColorPicker from "./ColorPicker";
 
@@ -80,7 +81,14 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
         return next;
       });
   };
+  // `selectedId` is the row the keyboard is on. `picked` is everything selected
+  // (Ctrl / Shift click, Shift+arrows); it only counts while it holds that row.
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [picked, setPicked] = useState<Selection>(noSelection);
+  const multi = picked.ids.size > 1 && selectedId !== null && picked.ids.has(selectedId) ? picked.ids : null;
+  /** What an action on this row applies to: the whole selection when the row is part of it. */
+  const acting = (id: string): string[] => (multi?.has(id) ? [...multi] : [id]);
+  const [dragIds, setDragIds] = useState<string[]>([]);
   const [focusId, setFocusId] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -119,12 +127,14 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
     const id = reveal?.ids[reveal.ids.length - 1];
     if (!id) return;
     setSelectedId(id);
+    setPicked({ ids: new Set([id]), anchor: id });
     setFocusId(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reveal?.seq]);
 
   const select = (id: string, focus = false) => {
     setSelectedId(id);
+    setPicked({ ids: new Set([id]), anchor: id });
     if (focus) setFocusId(id);
   };
 
@@ -156,10 +166,13 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
   const handleDrop = (targetId: string, position: DropState["position"], template?: string) => {
     if (template) {
       dropTemplate(template, targetId, position);
-    } else if (dragId && dragId !== targetId) {
-      onNodesChange(moveNode(nodes, dragId, targetId, position));
+    } else if (dragId && !dragIds.includes(targetId)) {
+      const next = moveNodes(nodes, dragIds, targetId, position);
+      if (next === nodes && dragIds.length > 1) onNotice?.("They can't go inside themselves.");
+      else onNodesChange(next);
     }
     setDragId(null);
+    setDragIds([]);
     setDropState(null);
   };
 
@@ -185,7 +198,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
     const newPath = pathOf(newTree, node.id);
     setEditing(newPath ? { path: newPath, value: node.name } : null);
     if (parentId) setCollapsedFor(parentId, false);
-    setSelectedId(node.id);
+    select(node.id);
   };
 
   const renameAt = (path: number[], name: string) => {
@@ -203,6 +216,14 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
   };
 
   const duplicateAt = (path: number[], node: FsNode) => {
+    const ids = acting(node.id);
+    if (ids.length > 1) {
+      const made = duplicateNodes(nodes, ids, cloneWithNewIds);
+      onNodesChange(made.tree);
+      setSelectedId(made.ids[0]);
+      setPicked({ ids: new Set(made.ids), anchor: made.ids[0] });
+      return;
+    }
     const clone = cloneWithNewIds(node);
     const newTree = insertChild(nodes, path.length ? parentIdAt(nodes, path) : null, path[path.length - 1] + 1, clone);
     onNodesChange(newTree);
@@ -212,6 +233,23 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
 
   const deleteAt = (path: number[]) => {
     const id = nodeAt(nodes, path)?.id;
+    const ids = id ? acting(id) : [];
+    if (ids.length > 1) {
+      // Land on the first row left after the selection, else the one before it.
+      const rows = visibleRows();
+      const gone = rows.filter((r) => ids.includes(r.node.id)).map((r) => r.path);
+      const survives = (p: number[]) => !gone.some((g) => g.length <= p.length && g.every((v, i) => v === p[i]));
+      const at = rows.findIndex((r) => r.node.id === id);
+      const neighbour = rows.slice(at + 1).find((r) => survives(r.path)) ?? rows.slice(0, at).reverse().find((r) => survives(r.path));
+      onNodesChange(removeNodes(nodes, ids));
+      if (neighbour) select(neighbour.node.id, true);
+      else {
+        setSelectedId(null);
+        setPicked(noSelection);
+      }
+      setEditing(null);
+      return;
+    }
     if (id) {
       // Keep the keyboard somewhere sensible: the next row, else the previous one.
       const rows = visibleRows();
@@ -238,10 +276,34 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
 
   const onRowKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, node: FsNode, path: number[]) => {
     if (e.target !== e.currentTarget) return; // typing in a name field or a control
-    const action = keyAction(e);
-    if (!action) return;
     const rows = visibleRows();
     const at = rows.findIndex((r) => r.node.id === node.id);
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+      setPicked({ ids: new Set(rows.map((r) => r.node.id)), anchor: node.id });
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if (e.key === "Escape" && multi) {
+      setPicked({ ids: new Set([node.id]), anchor: node.id });
+      e.preventDefault();
+      return;
+    }
+    const action = keyAction(e);
+    if (!action) return;
+    if (e.shiftKey && (action === "up" || action === "down")) {
+      // Shift+arrows grow or shrink the selection from where it started.
+      const to = rows[at + (action === "down" ? 1 : -1)];
+      if (to) {
+        const from: Selection = { ids: picked.ids, anchor: multi || picked.anchor === node.id ? picked.anchor : node.id };
+        setPicked(clickSelect(from, to.node.id, rows.map((r) => r.node.id), e));
+        setSelectedId(to.node.id);
+        setFocusId(to.node.id);
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     const isOpenFolder = node.kind === "folder" && !isFileNode(node) && node.children.length > 0;
     if (action === "moveUp") moveAt(path, -1);
     else if (action === "moveDown") moveAt(path, 1);
@@ -273,6 +335,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
     const children = node.children;
     const isFile = isFileNode(node);
     const isSelected = selectedId === node.id;
+    const alsoSelected = !isSelected && !!multi?.has(node.id);
     const insertable = node.kind === "folder" && !isFile;
     const dropTarget = dropState?.targetId === node.id ? dropState.position : null;
     const isEditing = editing ? pathsEqual(path, editing.path) : false;
@@ -287,14 +350,20 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
     return (
       <div key={node.id}>
         <div
-          className={`tree-row ${isSelected ? "selected" : ""} ${dragId === node.id ? "dragging" : ""} ${dropTarget ? `droppable drop-${dropTarget}` : ""} ${isExpanded ? "insert-expanded-row" : ""}`}
+          className={`tree-row ${isSelected ? "selected" : ""} ${alsoSelected ? "also-selected" : ""} ${dragIds.includes(node.id) ? "dragging" : ""} ${dropTarget ? `droppable drop-${dropTarget}` : ""} ${isExpanded ? "insert-expanded-row" : ""}`}
           data-node-id={node.id}
           role="treeitem"
-          aria-selected={isSelected}
+          aria-selected={isSelected || alsoSelected}
           aria-level={depth + 1}
           aria-expanded={insertable && children.length > 0 ? !isCollapsed : undefined}
           tabIndex={isSelected || (!selectedId && depth === 0 && path[0] === 0) ? 0 : -1}
-          onClick={() => setSelectedId(node.id)}
+          onClick={(e) => {
+            if (!wantsMulti(e)) return select(node.id);
+            // Focus has already moved here; `picked` still holds what was selected before.
+            const next = clickSelect(picked, node.id, visibleRows().map((r) => r.node.id), e);
+            setPicked(next);
+            setSelectedId(next.ids.has(node.id) ? node.id : [...next.ids][0] ?? null);
+          }}
           onFocus={(e) => {
             if (e.target === e.currentTarget) setSelectedId(node.id);
           }}
@@ -338,12 +407,16 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
             className="drag"
             draggable
             onDragStart={(e) => {
+              const ids = acting(node.id);
               setDragId(node.id);
+              setDragIds(ids);
+              dragBadge(e.dataTransfer, ids.length);
               e.dataTransfer.effectAllowed = "move";
               e.dataTransfer.setData("text/plain", node.id);
             }}
             onDragEnd={() => {
               setDragId(null);
+              setDragIds([]);
               setDropState(null);
             }}
           >

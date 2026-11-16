@@ -254,3 +254,87 @@ export function findByName(root: FsNode[], query: string, limit = 50): FoundNode
 export function insertAfter(root: FsNode[], afterId: string, node: FsNode): FsNode[] {
   return insertRelative(root, afterId, "after", node);
 }
+
+// ---- several things at once (multi-select) ----
+
+/**
+ * The selected nodes that matter for a move, delete or copy: in the order they
+ * appear in the tree, leaving out anything that sits inside another selected
+ * folder (it travels with that folder anyway) and any id that no longer exists.
+ */
+export function topLevelOf(root: FsNode[], ids: Iterable<string>): FsNode[] {
+  const want = new Set(ids);
+  const out: FsNode[] = [];
+  const walk = (nodes: FsNode[]) => {
+    for (const n of nodes) {
+      if (want.has(n.id)) out.push(n);
+      else walk(n.children);
+    }
+  };
+  walk(root);
+  return out;
+}
+
+/** Remove several nodes at once. */
+export function removeNodes(root: FsNode[], ids: Iterable<string>): FsNode[] {
+  const gone = new Set(ids);
+  if (gone.size === 0) return root;
+  const walk = (nodes: FsNode[]): FsNode[] =>
+    nodes.filter((n) => !gone.has(n.id)).map((n) => (n.children.length ? { ...n, children: walk(n.children) } : n));
+  return walk(root);
+}
+
+/**
+ * Move several nodes next to, or into, a target. They land together, in the
+ * order they had in the tree. Returns the same tree (a no-op) when the target
+ * is one of the things being moved or sits inside one of them.
+ */
+export function moveNodes(root: FsNode[], ids: Iterable<string>, targetId: string, position: "before" | "after" | "into"): FsNode[] {
+  const moving = topLevelOf(root, ids);
+  if (moving.length === 0) return root;
+  const targetPath = findPath(root, targetId);
+  if (!targetPath) return root;
+  const movingIds = new Set(moving.map((n) => n.id));
+  if (targetPath.some((p) => movingIds.has(p.node.id))) return root;
+
+  const next = removeNodes(root, movingIds);
+  const path = findPath(next, targetId);
+  if (!path) return root;
+  const target = path[path.length - 1];
+  if (position === "into") return replaceChildren(next, path, [...target.node.children, ...moving]);
+  const arr = [...target.container];
+  arr.splice(target.index + (position === "after" ? 1 : 0), 0, ...moving);
+  const parentPath = path.slice(0, -1);
+  return parentPath.length === 0 ? arr : replaceChildren(next, parentPath, arr);
+}
+
+/** Move several nodes to the end of a folder (or of the top level when parentId is null). */
+export function moveNodesToParent(root: FsNode[], ids: Iterable<string>, parentId: string | null): FsNode[] {
+  const moving = topLevelOf(root, ids);
+  if (moving.length === 0) return root;
+  const movingIds = new Set(moving.map((n) => n.id));
+  if (parentId !== null) {
+    const targetPath = findPath(root, parentId);
+    if (!targetPath || targetPath.some((p) => movingIds.has(p.node.id))) return root;
+  }
+  const next = removeNodes(root, movingIds);
+  if (parentId === null) return [...next, ...moving];
+  const path = findPath(next, parentId);
+  if (!path) return root;
+  return replaceChildren(next, path, [...path[path.length - 1].node.children, ...moving]);
+}
+
+/**
+ * Copy several nodes; each copy lands right after its original. `clone` makes
+ * the copy (with fresh ids). Returns the new tree and the ids of the copies.
+ */
+export function duplicateNodes(root: FsNode[], ids: Iterable<string>, clone: (n: FsNode) => FsNode): { tree: FsNode[]; ids: string[] } {
+  let tree = root;
+  const made: string[] = [];
+  for (const node of topLevelOf(root, ids)) {
+    const copy = clone(node);
+    tree = insertRelative(tree, node.id, "after", copy);
+    made.push(copy.id);
+  }
+  return { tree, ids: made };
+}

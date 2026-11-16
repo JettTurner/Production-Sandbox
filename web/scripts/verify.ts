@@ -15,7 +15,8 @@ import { buildKit, buildKitDocument, cleanNames, defaultKitOptions, starterBlock
 import { renamedNode, moveSibling, moveToParent, findByName } from "../src/lib/treeEdit";
 import { scanDestination, createOnDisk, readFolder } from "../src/lib/folders";
 import { dateBlanks, fillBlanks, findBlanks, usesDateBlanks } from "../src/lib/blanks";
-import { dropZone, keyAction } from "../src/lib/dnd";
+import { dropZone, keyAction, clickSelect, noSelection } from "../src/lib/dnd";
+import { topLevelOf, removeNodes, moveNodes, moveNodesToParent, duplicateNodes } from "../src/lib/treeEdit";
 import { isFileNode } from "../src/lib/types";
 import type { FsNode } from "../src/lib/types";
 
@@ -358,6 +359,29 @@ console.log(`\n== behavior checks ==`);
   const hits = findByName(t4, "a");
   check(hits.map((h) => h.node.name).join(",") === "A,A1" && hits[1].parents.join("/") === "A" && hits[1].ids.length === 2, "findByName returns matches with their path");
   check(findByName(t4, "deep")[0].ids.length === 3 && findByName(t4, "  ").length === 0, "findByName is case-insensitive and ignores blank queries");
+  // several things at once
+  const t5 = parseFh(`@root\nA\n\tA1\n\tA2\nB\nC\nD\n\tD1\n`).doc!.root;
+  const id5 = (name: string) => findByName(t5, name).find((h) => h.node.name === name)!.node.id;
+  check(topLevelOf(t5, [id5("C"), id5("A1"), id5("A"), "gone"]).map((n) => n.name).join(",") === "A,C", "topLevelOf: tree order, nested and missing ids dropped");
+  check(names4(removeNodes(t5, [id5("A2"), id5("C")])) === "A(A1) B D(D1)", "removeNodes removes at any depth");
+  check(names4(moveNodes(t5, [id5("C"), id5("A1")], id5("D"), "into")) === "A(A2) B D(D1 A1 C)", "moveNodes into a folder keeps tree order");
+  check(names4(moveNodes(t5, [id5("B"), id5("D")], id5("A"), "before")) === "B D(D1) A(A1 A2) C", "moveNodes before a target");
+  check(names4(moveNodes(t5, [id5("A"), id5("B")], id5("C"), "after")) === "C A(A1 A2) B D(D1)", "moveNodes after a target");
+  check(moveNodes(t5, [id5("A"), id5("B")], id5("A1"), "into") === t5 && moveNodes(t5, [id5("A"), id5("B")], id5("B"), "after") === t5, "moveNodes onto or inside the selection is a no-op");
+  check(names4(moveNodesToParent(t5, [id5("A1"), id5("D1")], null)) === "A(A2) B C D A1 D1", "moveNodesToParent to the top level");
+  check(moveNodesToParent(t5, [id5("A"), id5("C")], id5("A2")) === t5, "moveNodesToParent into the selection is a no-op");
+  const dup5 = duplicateNodes(t5, [id5("B"), id5("D")], cloneWithNewIds);
+  check(names4(dup5.tree) === "A(A1 A2) B B C D(D1) D(D1)" && dup5.ids.length === 2 && new Set([...dup5.ids, id5("B"), id5("D")]).size === 4, "duplicateNodes copies each next to its original with new ids");
+  const order5 = ["a", "b", "c", "d"];
+  const plain = { ctrlKey: false, metaKey: false, shiftKey: false };
+  let s5 = clickSelect(noSelection, "b", order5, plain);
+  s5 = clickSelect(s5, "d", order5, { ...plain, ctrlKey: true });
+  check([...s5.ids].join("") === "bd" && s5.anchor === "d", "Ctrl-click adds to the selection");
+  s5 = clickSelect(s5, "d", order5, { ...plain, metaKey: true });
+  check([...s5.ids].join("") === "b", "Ctrl-click again takes it out");
+  s5 = clickSelect(clickSelect(noSelection, "c", order5, plain), "a", order5, { ...plain, shiftKey: true });
+  check([...s5.ids].join("") === "abc" && s5.anchor === "c", "Shift-click selects the range from the anchor");
+  check([...clickSelect(s5, "d", order5, plain).ids].join("") === "d", "a plain click selects just one");
 }
 
 {

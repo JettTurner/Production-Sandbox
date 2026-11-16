@@ -5,7 +5,10 @@ import { cloneWithNewIds } from "../lib/ids";
 import {
   insertAfter,
   insertChild,
-  moveNode,
+  moveNodes,
+  moveNodesToParent,
+  removeNodes,
+  duplicateNodes,
   moveToParent,
   makeFile,
   makeFolder,
@@ -15,7 +18,7 @@ import {
   renamedNode,
   updateNode,
 } from "../lib/treeEdit";
-import { dropZone, keyAction, NODE_MIME, TEMPLATE_MIME } from "../lib/dnd";
+import { clickSelect, dragBadge, dropZone, keyAction, NODE_MIME, TEMPLATE_MIME, wantsMulti } from "../lib/dnd";
 import type { DropPos } from "../lib/dnd";
 import { PlusDropdown } from "./Designer";
 import type { AddSpec, SectionRef } from "./Designer";
@@ -78,7 +81,10 @@ export default function ColumnsView({
   // Touch "Move": the row that has been picked up, waiting for a tap on where it goes.
   const [moving, setMoving] = useState<{ id: string; owner: string; name: string } | null>(null);
   const [sel, setSel] = useState<string[]>([]);
-  const [drag, setDrag] = useState<{ id: string; owner: string } | null>(null);
+  // Several rows of one column selected together (Ctrl / Shift click, Shift+arrows). The
+  // row in `sel` for that column is always one of them; any ordinary selection clears it.
+  const [multi, setMulti] = useState<{ col: number; ids: Set<string>; anchor: string | null } | null>(null);
+  const [drag, setDrag] = useState<{ id: string; ids: string[]; owner: string } | null>(null);
   const [dropRow, setDropRow] = useState<{ id: string; pos: DropPos } | null>(null);
   const [active, setActive] = useState(0);
   const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
@@ -163,7 +169,29 @@ export default function ColumnsView({
     setMoving(null);
   };
 
+  /** The rows an action on `id` applies to: the whole selection when the row is part of it. */
+  const acting = (col: number, id: string): string[] => {
+    if (!multi || multi.col !== col || !multi.ids.has(id) || sel[col] === undefined || !multi.ids.has(sel[col])) return [id];
+    const ids = columns[col].nodes.filter((n) => multi.ids.has(n.id)).map((n) => n.id);
+    return ids.length > 1 ? ids : [id];
+  };
+  const isAlso = (col: number, id: string) => sel[col] !== id && acting(col, sel[col] ?? "").includes(id);
+
+  /** Ctrl / Shift click, or Shift+arrow: change which rows of a column are selected together. */
+  const selectMore = (col: number, id: string, e: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }, focus = false) => {
+    const order = columns[col].nodes.map((n) => n.id);
+    const prev =
+      multi && multi.col === col ? multi : { ids: new Set(sel[col] ? [sel[col]] : []), anchor: sel[col] ?? null };
+    const next = clickSelect(prev, id, order, e);
+    const primary = next.ids.has(id) ? id : order.find((x) => next.ids.has(x));
+    setMulti(next.ids.size > 1 ? { col, ...next } : null);
+    setSel((p) => (primary ? [...p.slice(0, col), primary] : p.slice(0, col)));
+    setActive(col);
+    if (focus && primary) setFocusKey(`${col}:${primary}`);
+  };
+
   const select = (col: number, id: string, focus = false) => {
+    setMulti(null);
     setSel((prev) => [...prev.slice(0, col), id]);
     setActive(col);
     if (focus) setFocusKey(`${col}:${id}`);
@@ -196,9 +224,11 @@ export default function ColumnsView({
 
   const remove = (col: number, node: FsNode) => {
     const c = columns[col];
+    const ids = acting(col, node.id);
     const at = c.nodes.findIndex((n) => n.id === node.id);
-    const neighbour = c.nodes[at + 1] ?? c.nodes[at - 1];
-    commit(c.owner, removeNode(ownerNodes(c.owner), node.id));
+    const stays = (n: FsNode) => !ids.includes(n.id);
+    const neighbour = c.nodes.slice(at + 1).find(stays) ?? c.nodes.slice(0, at).reverse().find(stays);
+    commit(c.owner, ids.length > 1 ? removeNodes(ownerNodes(c.owner), ids) : removeNode(ownerNodes(c.owner), node.id));
     if (neighbour) select(col, neighbour.id, true);
     else {
       setSel((prev) => prev.slice(0, col));
@@ -214,6 +244,14 @@ export default function ColumnsView({
 
   const duplicate = (col: number, node: FsNode) => {
     const c = columns[col];
+    const ids = acting(col, node.id);
+    if (ids.length > 1) {
+      const made = duplicateNodes(ownerNodes(c.owner), ids, cloneWithNewIds);
+      commit(c.owner, made.tree);
+      setSel((prev) => [...prev.slice(0, col), made.ids[0]]);
+      setMulti({ col, ids: new Set(made.ids), anchor: made.ids[0] });
+      return;
+    }
     const clone = cloneWithNewIds(node);
     commit(c.owner, insertAfter(ownerNodes(c.owner), node.id, clone));
     select(col, clone.id);
@@ -234,10 +272,28 @@ export default function ColumnsView({
 
   const onKey = (e: React.KeyboardEvent, col: number, node: FsNode) => {
     if (e.target !== e.currentTarget) return;
-    const action = keyAction(e);
-    if (!action) return;
     const c = columns[col];
     const at = c.nodes.findIndex((n) => n.id === node.id);
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+      if (c.nodes.length > 1) setMulti({ col, ids: new Set(c.nodes.map((n) => n.id)), anchor: node.id });
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if (e.key === "Escape" && multi) {
+      setMulti(null);
+      e.preventDefault();
+      return;
+    }
+    const action = keyAction(e);
+    if (!action) return;
+    if (e.shiftKey && (action === "up" || action === "down")) {
+      const to = c.nodes[at + (action === "down" ? 1 : -1)];
+      if (to) selectMore(col, to.id, e, true);
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     if (action === "moveUp") move(col, node, -1);
     else if (action === "moveDown") move(col, node, 1);
     else if (action === "down") {
@@ -313,7 +369,8 @@ export default function ColumnsView({
                 } else if (moving) {
                   // Dropped on the column itself: move to the end of this level.
                   e.preventDefault();
-                  commit(c.owner, moveToParent(ownerNodes(c.owner), moving.id, c.parentId));
+                  commit(c.owner, moveNodesToParent(ownerNodes(c.owner), moving.ids, c.parentId));
+                  setMulti(null);
                   setSel((prev) => prev.slice(0, col));
                 }
               }}
@@ -344,28 +401,31 @@ export default function ColumnsView({
                   return (
                     <div
                       key={node.id}
-                      className={`col-row ${isSel ? "selected" : ""} ${isActive ? "active" : ""} ${isInsert ? "is-block" : ""} ${drag?.id === node.id ? "dragging" : ""} ${dropRow?.id === node.id ? `drop-${dropRow.pos}` : ""} ${moving?.id === node.id ? "picked" : ""}`}
+                      className={`col-row ${isSel ? "selected" : ""} ${isActive ? "active" : ""} ${isAlso(col, node.id) ? "also-selected" : ""} ${isInsert ? "is-block" : ""} ${drag?.ids.includes(node.id) ? "dragging" : ""} ${dropRow?.id === node.id ? `drop-${dropRow.pos}` : ""} ${moving?.id === node.id ? "picked" : ""}`}
                       draggable={!isEditing}
                       onDragStart={(e) => {
                         e.stopPropagation();
                         e.dataTransfer.setData(NODE_MIME, node.id);
                         e.dataTransfer.effectAllowed = "move";
-                        setDrag({ id: node.id, owner: ownerKey(c.owner) });
+                        const ids = acting(col, node.id);
+                        dragBadge(e.dataTransfer, ids.length);
+                        setDrag({ id: node.id, ids, owner: ownerKey(c.owner) });
                       }}
                       onDragEnd={endDrag}
                       style={color ? ({ "--c": color } as React.CSSProperties) : undefined}
                       role="option"
-                      aria-selected={isSel}
+                      aria-selected={isSel || isAlso(col, node.id)}
                       tabIndex={isSel || (!sel[col] && at === 0) ? 0 : -1}
                       data-row={`${col}:${node.id}`}
-                      onClick={() => {
+                      onClick={(e) => {
                         if (moving && moving.id !== node.id && !isInsert && !isFile) putDown(col, node.id);
+                        else if (wantsMulti(e)) selectMore(col, node.id, e);
                         else select(col, node.id);
                       }}
                       onDoubleClick={() => (isInsert ? onOpenBlock(node.name) : setEditing({ id: node.id, value: node.name }))}
                       onKeyDown={(e) => onKey(e, col, node)}
                       onDragOver={(e) => {
-                        const moving = drag && drag.owner === ownerKey(c.owner) && drag.id !== node.id;
+                        const moving = drag && drag.owner === ownerKey(c.owner) && !drag.ids.includes(node.id);
                         if (moving) {
                           e.preventDefault();
                           e.stopPropagation();
@@ -381,15 +441,21 @@ export default function ColumnsView({
                         e.dataTransfer.dropEffect = "copy";
                       }}
                       onDrop={(e) => {
-                        const moving = drag && drag.owner === ownerKey(c.owner) && drag.id !== node.id ? drag : null;
+                        const moving = drag && drag.owner === ownerKey(c.owner) && !drag.ids.includes(node.id) ? drag : null;
                         if (moving) {
                           e.preventDefault();
                           e.stopPropagation();
                           const pos = dropRow?.id === node.id ? dropRow.pos : "after";
                           endDrag();
-                          commit(c.owner, moveNode(ownerNodes(c.owner), moving.id, node.id, pos));
+                          const next = moveNodes(ownerNodes(c.owner), moving.ids, node.id, pos);
+                          if (next === ownerNodes(c.owner)) return onNotice("It can't go inside itself.");
+                          commit(c.owner, next);
                           if (pos === "into") select(col, node.id);
-                          else setSel((prev) => [...prev.slice(0, col), moving.id]);
+                          else {
+                            setSel((prev) => [...prev.slice(0, col), moving.id]);
+                            // Dropped beside a row of this column: the group stays selected where it landed.
+                            setMulti(moving.ids.length > 1 ? { col, ids: new Set(moving.ids), anchor: moving.id } : null);
+                          }
                           return;
                         }
                         const template = e.dataTransfer.getData(TEMPLATE_MIME);

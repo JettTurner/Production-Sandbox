@@ -2745,6 +2745,38 @@ button.chip:hover {
   outline: none;
 }
 
+/* ---------- Several things selected together ----------
+   The row the keyboard is on keeps its usual "selected" look; the others in
+   the selection get the same tint without the row controls. */
+.tree-row.also-selected,
+.col-row.also-selected {
+  background: var(--sel-bg);
+  border-color: var(--sel-border);
+}
+.card.is-selected,
+.subcard.is-selected,
+.card-item.is-selected,
+.brick.is-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.card-item.is-selected,
+.subcard.is-selected {
+  background: var(--accent-weak);
+}
+/* Shown under the pointer while several things are dragged (see dragBadge). */
+.drag-badge {
+  position: fixed;
+  top: -200px;
+  left: 0;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 600 12px var(--sans);
+  white-space: nowrap;
+}
+
 /* ---------- Block colors ----------
    Anything drawn in a block's color sets --c inline. Borders use --c as is;
    text uses --ink-c, which the light theme darkens so it stays readable. */

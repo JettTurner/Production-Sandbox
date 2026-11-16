@@ -817,7 +817,7 @@ export default function App() {
             ? `${errorCount} ${errorCount === 1 ? "error" : "errors"} · ${warningCount} ${warningCount === 1 ? "warning" : "warnings"}`
             : "No problems found"}
         </span>
-        <span className="status-tip">Double-click to rename · Arrow keys to move around · Del to delete · Drag a block onto a folder</span>
+        <span className="status-tip">Double-click to rename · Ctrl-click or Shift-click to select several · Del to delete · Drag a block onto a folder</span>
       </footer>
 
       <nav className="mobile-tabs" aria-label="Sections">

@@ -235,6 +235,11 @@ All return new trees; never mutate.
 - `renamedNode(node, text)` — THE rename rule, shared by every view (rejects
   bad names; never turns a folder into a file). `moveSibling`, `insertAfter`,
   `moveToParent` (drop onto a level), `findByName` (the Find box).
+- Several at once: `topLevelOf` (the selection in tree order, without things
+  nested inside another selected folder), `removeNodes`, `moveNodes`,
+  `moveNodesToParent`, `duplicateNodes`. The views call these with "what
+  this action applies to": the whole selection when the row acted on is part
+  of it, otherwise just that row.
 
 ### `web/src/lib/kit.ts` — "start from a kit" and starter blocks
 
@@ -264,6 +269,11 @@ All return new trees; never mutate.
   position, for a row, a folder or a card.
 - `keyAction(event)` — the one mapping from keys to actions (rename, delete,
   move, reorder) used by all three views.
+- `clickSelect(selection, id, order, event)` — the one rule for selecting
+  several things: plain click = just that one, Ctrl/Cmd click = add or take
+  out, Shift click = the range from the anchor. `wantsMulti(event)` tells a
+  view the click is one of those. `dragBadge` shows "N items" under the
+  pointer while a selection is dragged.
 
 ### `web/src/lib/session.ts` — what the app remembers
 

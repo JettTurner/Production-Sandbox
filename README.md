@@ -57,6 +57,7 @@ A **block** is a reusable set of folders. In the `.fh` file a block is a `@templ
 | Feature | How |
 | --- | --- |
 | **Editing** | In every view: double-click or `F2` to rename, `Del` to delete, arrow keys to move around, `Alt+arrows` to reorder, and drag to rearrange (onto a folder to put it inside, onto an edge to place it before or after). In Blocks, `Enter` goes into a folder and `Backspace` goes back up. In List, double-click a block row to edit the block in place. |
+| **Select several** | `Ctrl`-click (`Cmd` on a Mac) adds or removes one; `Shift`-click takes everything in between. In List and Columns, `Shift+arrows` extend the selection and `Ctrl+A` takes everything. Then drag any one of them to move them all, `Del` deletes them all, and Duplicate copies them all. `Esc` lets go. Needs a keyboard, so not on a phone. |
 | **Find** | `Ctrl+F` or the Find box: type part of a name, pick a match, and the current view jumps to it. |
 | **Source editor** | Syntax highlighting and inline parse warnings/errors. Comments you write are kept when you edit in the tree. |
 | **Pre-flight checks** | Names that Windows can't create (`< > : " / \ | ? *`, reserved names like `CON`, trailing dot or space), a name used as both file and folder, and paths that approach the 260-character limit are flagged before anything is written. Same-name siblings are merged, and the counts reflect what actually lands on disk. |

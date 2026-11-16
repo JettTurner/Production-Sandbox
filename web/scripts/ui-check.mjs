@@ -236,6 +236,67 @@ try {
   check((await page.locator(".whatsnew section").count()) >= 1, "What's new shows the changelog");
   await page.keyboard.press("Escape");
 
+  // ---- several things at once ----
+  {
+    const multi = await open();
+    await sample(multi, "VizLab");
+    const row = (n) => `.editor .tree-row:has(.name:text-is("${n}"))`;
+    const undo = async () => { await multi.keyboard.press("Control+z"); await multi.waitForTimeout(200); };
+    await view(multi, "List");
+    await multi.click(`${row("_AI")} .name`);
+    await multi.click(`${row("_Twinmotion")} .name`, { modifiers: ["Shift"] });
+    check((await multi.locator(".editor .tree-row.selected, .editor .tree-row.also-selected").count()) === 3, "List: Shift-click selects a range");
+    await multi.keyboard.press("Delete");
+    await multi.waitForTimeout(200);
+    let src = await sourceText(multi);
+    check(!/^\s*(_AI|_Blender|_Twinmotion)$/m.test(src) && /^\s*_D5$/m.test(src), "List: Del deletes everything selected");
+    await undo();
+    await multi.click(`${row("_AI")} .name`);
+    await multi.click(`${row("_D5")} .name`, { modifiers: ["Control"] });
+    check((await multi.locator(".editor .tree-row.selected, .editor .tree-row.also-selected").count()) === 2, "List: Ctrl-click adds to the selection");
+    await drag(multi, `${row("_D5")} .drag`, row("_Programs"));
+    src = await sourceText(multi);
+    check(/_Programs\n\s+_AI\n\s+_D5\n/.test(src), "List: dragging one of the selection moves all of it, in order");
+    await undo();
+    await multi.click(`${row("_AI")} .name`);
+    await multi.keyboard.press("Shift+ArrowDown");
+    await multi.keyboard.press("Shift+ArrowDown");
+    check((await multi.locator(".editor .tree-row.selected, .editor .tree-row.also-selected").count()) === 3, "List: Shift+arrows extend the selection");
+    await multi.keyboard.press("Escape");
+    check((await multi.locator(".editor .tree-row.also-selected").count()) === 0, "List: Esc goes back to one");
+
+    await view(multi, "Columns");
+    const crow = (n) => `.col-row:has(.name:text-is("${n}"))`;
+    await multi.click(`${crow("VIZLAB")} .name`);
+    await multi.click(`${crow("06_Templates")} .name`);
+    await multi.click(`${crow("_AI")} .name`);
+    await multi.click(`${crow("_Twinmotion")} .name`, { modifiers: ["Shift"] });
+    await multi.click(`${crow("_Blender")} .name`, { modifiers: ["Control"] });
+    check((await multi.locator(".col-row.also-selected").count()) === 1 && (await multi.locator(".column").count()) >= 3, "Columns: Shift-click a range, Ctrl-click takes one out");
+    await drag(multi, crow("_AI"), crow("05_Tools"));
+    src = await sourceText(multi);
+    check(/_Plugins\n\s+_AI\n\s+_Twinmotion\n/.test(src) && /06_Templates\n\s+_Blender\n/.test(src), "Columns: the selection is dragged into a folder together");
+    await undo();
+
+    await view(multi, "Blocks");
+    const item = (n) => `.card-item:has(.name-btn:text-is("${n}"))`;
+    await multi.click(item("_AI"), { modifiers: ["Control"], position: { x: 6, y: 6 } });
+    await multi.click(`${item("_D5")} .name-btn`, { modifiers: ["Control"] });
+    check((await multi.locator(".is-selected").count()) === 2 && (await multi.locator(".board > .card:not(.add-card)").count()) === 8, "Blocks: Ctrl-click selects instead of going into the folder");
+    await drag(multi, item("_D5"), `${card("05_Tools")} > .card-head`);
+    src = await sourceText(multi);
+    check(/_Plugins\n\s+_AI\n\s+_D5\n/.test(src), "Blocks: the selection is dragged into another card together");
+    await undo();
+    await multi.click(`${item("_AI")} .name-btn`, { modifiers: ["Control"] });
+    await multi.click(`${item("_Sketchup")} .name-btn`, { modifiers: ["Shift"] });
+    check((await multi.locator(".is-selected").count()) === 5, "Blocks: Shift-click selects a range");
+    await multi.keyboard.press("Delete");
+    await multi.waitForTimeout(200);
+    src = await sourceText(multi);
+    check(/06_Templates\n\s+07_Admin/.test(src), "Blocks: Del deletes everything selected");
+    await multi.context().close();
+  }
+
   // ---- first run opens the New dialog ----
   const fresh = await open({ firstRun: true });
   check((await fresh.locator(".dialog.wizard").count()) === 1, "a first run starts in the New dialog");

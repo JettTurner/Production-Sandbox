@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import type { FsNode } from "../lib/types";
 import { isFileNode } from "../lib/types";
-import { dropZone, keyAction, NODE_MIME, TEMPLATE_MIME } from "../lib/dnd";
-import type { DropPos } from "../lib/dnd";
+import { clickSelect, dragBadge, dropZone, keyAction, noSelection, NODE_MIME, TEMPLATE_MIME, wantsMulti } from "../lib/dnd";
+import type { DropPos, Selection } from "../lib/dnd";
 import {
   insertChild,
   makeFile,
   makeFolder,
   makeInsert,
   moveNode,
+  moveNodes,
+  moveNodesToParent,
   moveSibling,
   moveToParent,
   removeNode,
+  removeNodes,
+  topLevelOf,
   renamedNode,
   updateNode,
 } from "../lib/treeEdit";
@@ -71,7 +75,12 @@ export default function BlocksView({
   const [loc, setLoc] = useState<string[]>(() => autoEnter(nodes));
   const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
   const [menu, setMenu] = useState<{ parentId: string | null; anchor: HTMLElement } | null>(null);
+  // Several things selected together: Ctrl / Cmd click adds or removes one, Shift click takes a range.
+  const [picked, setPicked] = useState<Selection>(noSelection);
+  /** What an action on this thing applies to: the whole selection when it is part of it. */
+  const acting = (id: string): string[] => (picked.ids.size > 1 && picked.ids.has(id) ? [...picked.ids] : [id]);
   const [drag, setDrag] = useState<string | null>(null);
+  const [dragIds, setDragIds] = useState<string[]>([]);
   const [drop, setDrop] = useState<{ id: string; pos: DropPos } | null>(null);
   // The innermost folder the pointer is over while dragging: it shows a "Drop it here" zone.
   const [overBox, setOverBox] = useState<string | null>(null);
@@ -85,6 +94,7 @@ export default function BlocksView({
     setLoc(autoEnter(nodes));
     setEditing(null);
     setMoving(null);
+    setPicked(noSelection);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateName]);
 
@@ -119,6 +129,7 @@ export default function BlocksView({
   const movingNode = moving ? findIn(nodes, moving) : null;
 
   const enter = (path: FsNode[], focus?: string) => {
+    setPicked(noSelection);
     setLoc(path.map((n) => n.id));
     setEditing(null);
     // Keep the keyboard inside the board: land on the first thing in the new folder.
@@ -145,7 +156,11 @@ export default function BlocksView({
     commit(updateNode(nodes, node.id, () => result.node));
   };
 
-  const remove = (node: FsNode) => commit(removeNode(nodes, node.id));
+  const remove = (node: FsNode) => {
+    const ids = acting(node.id);
+    commit(ids.length > 1 ? removeNodes(nodes, ids) : removeNode(nodes, node.id));
+    setPicked(noSelection);
+  };
 
   /** Put the picked-up thing (touch Move) into a folder, or onto the board when parentId is the board's folder. */
   const putDown = (parentId: string | null) => {
@@ -160,6 +175,7 @@ export default function BlocksView({
   // ---- drag & drop: blocks from the sidebar, and anything on the board ----
   const endDrag = () => {
     setDrag(null);
+    setDragIds([]);
     setDrop(null);
     setOverBox(null);
   };
@@ -177,7 +193,7 @@ export default function BlocksView({
   /** `id` null = the board itself. `mode` decides how the pointer position maps to before / into / after. */
   const dropProps = (id: string | null, mode: "card" | "folder" | "row" | "into") => ({
     onDragOver: (e: React.DragEvent) => {
-      if (!accepts(e) || drag === id || yields(id)) return;
+      if (!accepts(e) || (id !== null && dragIds.includes(id)) || yields(id)) return;
       e.preventDefault();
       e.stopPropagation();
       e.dataTransfer.dropEffect = drag ? "move" : "copy";
@@ -187,15 +203,18 @@ export default function BlocksView({
       if (drop?.id !== key || drop.pos !== pos) setDrop({ id: key, pos });
     },
     onDrop: (e: React.DragEvent) => {
-      if (!accepts(e) || drag === id || yields(id)) return;
+      if (!accepts(e) || (id !== null && dragIds.includes(id)) || yields(id)) return;
       e.preventDefault();
       e.stopPropagation();
       const pos = drop?.pos ?? "into";
       const dragged = drag;
+      const ids = dragIds;
       const template = e.dataTransfer.getData(TEMPLATE_MIME);
       endDrag();
       if (dragged) {
-        commit(id === null ? moveToParent(nodes, dragged, hereId) : moveNode(nodes, dragged, id, pos));
+        const next = id === null ? moveNodesToParent(nodes, ids, hereId) : moveNodes(nodes, ids, id, pos);
+        if (next === nodes && id !== null) onNotice("It can't go inside itself.");
+        else commit(next);
         setFocusId(dragged);
       } else if (template) {
         if (id === null || pos === "into") add(id ?? hereId, { kind: "insert", template });
@@ -210,14 +229,17 @@ export default function BlocksView({
       e.stopPropagation();
       e.dataTransfer.setData(NODE_MIME, node.id);
       e.dataTransfer.effectAllowed = "move";
+      const ids = acting(node.id);
+      dragBadge(e.dataTransfer, ids.length);
       setDrag(node.id);
+      setDragIds(ids);
     },
     onDragEnd: endDrag,
   });
   /** Tracks which folder box the pointer is in while dragging (judged by position; relatedTarget is unreliable). */
   const overProps = (node: FsNode) => {
     const mark = (e: React.DragEvent) => {
-      if (accepts(e) && drag !== node.id && !yields(node.id) && overBox !== node.id) setOverBox(node.id);
+      if (accepts(e) && !dragIds.includes(node.id) && !yields(node.id) && overBox !== node.id) setOverBox(node.id);
     };
     return {
       onDragEnterCapture: mark,
@@ -233,12 +255,17 @@ export default function BlocksView({
     };
   };
   const stateClass = (id: string) =>
-    `${drag === id ? "dragging" : ""} ${drop?.id === id ? `drop-${drop.pos}` : ""} ${moving === id ? "picked" : ""}`;
+    `${dragIds.includes(id) ? "dragging" : ""} ${picked.ids.size > 1 && picked.ids.has(id) ? "is-selected" : ""} ${drop?.id === id ? `drop-${drop.pos}` : ""} ${moving === id ? "picked" : ""}`;
 
   // ---- keyboard ----
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
     if (target.tagName === "INPUT") return;
+    if (e.key === "Escape" && picked.ids.size > 0) {
+      setPicked(noSelection);
+      e.preventDefault();
+      return;
+    }
     const action = keyAction(e);
     if (!action) return;
     const el = target.closest<HTMLElement>("[data-nav]");
@@ -343,6 +370,7 @@ export default function BlocksView({
       <div
         key={node.id}
         className={`brick ${top ? "big" : ""} ${stateClass(node.id)}`}
+        data-sel={node.id}
         style={{ "--c": color } as React.CSSProperties}
         tabIndex={0}
         data-nav={top ? "card" : "item"}
@@ -382,7 +410,7 @@ export default function BlocksView({
         </span>
       );
       return top ? (
-        <section key={node.id} className={`card file ${stateClass(node.id)}`} {...dragProps(node)} {...dropProps(node.id, "card")}>
+        <section key={node.id} data-sel={node.id} className={`card file ${stateClass(node.id)}`} {...dragProps(node)} {...dropProps(node.id, "card")}>
           <div className="card-head">
             <span className="node-icon file"><FileIcon /></span>
             {name}
@@ -390,7 +418,7 @@ export default function BlocksView({
           </div>
         </section>
       ) : (
-        <div key={node.id} className={`card-item ${stateClass(node.id)}`} {...dragProps(node)} {...dropProps(node.id, "row")}>
+        <div key={node.id} data-sel={node.id} className={`card-item ${stateClass(node.id)}`} {...dragProps(node)} {...dropProps(node.id, "row")}>
           <span className="node-icon file"><FileIcon /></span>
           {name}
           {tools(node)}
@@ -401,7 +429,7 @@ export default function BlocksView({
     // An empty folder inside a card is just a row; anything with contents is a box.
     if (!top && node.children.length === 0) {
       return (
-        <div key={node.id} className={`card-item ${stateClass(node.id)}`} {...dragProps(node)} {...dropProps(node.id, "folder")}>
+        <div key={node.id} data-sel={node.id} className={`card-item ${stateClass(node.id)}`} {...dragProps(node)} {...dropProps(node.id, "folder")}>
           <span className="node-icon"><FolderIcon /></span>
           {isEditing ? nameInput(node) : folderName(node, path, "item", "name-btn")}
           <button type="button" className="icon-btn" tabIndex={-1} title={`Add something inside ${node.name}`} aria-label={`Add inside ${node.name}`} onClick={(e) => openMenu(node.id, e)} onMouseDown={(e) => e.stopPropagation()}>
@@ -416,6 +444,7 @@ export default function BlocksView({
     return (
       <Box
         key={node.id}
+        data-sel={node.id}
         className={`${top ? "card" : "subcard"} ${stateClass(node.id)}`}
         {...dragProps(node)}
         {...dropProps(node.id, top ? "card" : "folder")}
@@ -448,7 +477,11 @@ export default function BlocksView({
         section={section}
         onSectionRoot={() => enter([])}
         trail={trail.map((n, i) => ({ key: n.id, label: n.name, onClick: () => enter(trail.slice(0, i + 1)) }))}
-        hint={`${here.length} ${here.length === 1 ? "thing" : "things"} here · click a folder’s name to go into it · drag to rearrange`}
+        hint={
+          picked.ids.size > 1
+            ? `${topLevelOf(nodes, picked.ids).length} selected · drag them together, Del deletes them, Esc lets go`
+            : `${here.length} ${here.length === 1 ? "thing" : "things"} here · click a folder’s name to go into it · drag to rearrange`
+        }
       />
 
       {movingNode && (
@@ -467,8 +500,21 @@ export default function BlocksView({
         tabIndex={-1}
         className={`board ${drop?.id === "@here" ? "drop" : ""} ${moving ? "placing" : ""}`}
         onKeyDown={onKeyDown}
+        onClickCapture={(e) => {
+          // Ctrl / Cmd / Shift click selects instead of doing what a plain click does (going into a folder).
+          const target = e.target as HTMLElement;
+          if (moving || !wantsMulti(e) || target.closest("input, .icon-btn, .add-card")) return;
+          const el = target.closest<HTMLElement>("[data-sel]");
+          if (!el) return;
+          e.preventDefault();
+          e.stopPropagation();
+          const order = Array.from(boardRef.current?.querySelectorAll<HTMLElement>("[data-sel]") ?? []).map((x) => x.dataset.sel!);
+          setPicked((prev) => clickSelect(prev, el.dataset.sel!, order, e));
+          el.querySelector<HTMLElement>("[data-nav]")?.focus();
+        }}
         onClick={(e) => {
           if (moving && e.target === e.currentTarget) putDown(hereId);
+          else if (picked.ids.size > 0) setPicked(noSelection);
         }}
         {...dropProps(null, "into")}
       >
