@@ -113,15 +113,19 @@ export function useFhDocument(initialSource: string) {
   const undo = useCallback(() => step(pastRef, futureRef), [step]);
   const redo = useCallback(() => step(futureRef, pastRef), [step]);
 
-  /** Load a new document: replaces the text, clears history, resets the baseline. */
-  const load = useCallback((text: string) => {
+  /**
+   * Load a new document: replaces the text, clears history, resets the baseline.
+   * `unsaved` marks it as having unsaved changes from the start (generated
+   * content that exists nowhere else yet).
+   */
+  const load = useCallback((text: string, unsaved = false) => {
     const normalized = normalizeSource(text);
     pastRef.current = [];
     futureRef.current = [];
     lastApplyRef.current = 0;
     liveRef.current = parseLive(normalized, null);
     setSource(normalized);
-    setBaseline(normalized);
+    setBaseline(unsaved ? "" : normalized);
     setHistoryTick((t) => t + 1);
   }, []);
 

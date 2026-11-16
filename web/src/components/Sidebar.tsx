@@ -3,6 +3,8 @@ import type { FhDocument } from "../lib/types";
 import type { SectionRef } from "./Designer";
 import { TEMPLATE_MIME } from "./Designer";
 import { countOwnNodes } from "../lib/treeEdit";
+import { starterBlocks } from "../lib/kit";
+import type { StarterBlock } from "../lib/kit";
 import { FolderIcon, PlusIcon, SearchIcon } from "./icons";
 
 interface SidebarProps {
@@ -14,14 +16,18 @@ interface SidebarProps {
   uses: Record<string, number>;
   onSelect: (section: SectionRef) => void;
   onAddTemplate: (name: string) => void;
+  /** Add one of the ready-made starter blocks to this structure. */
+  onAddStarter: (starter: StarterBlock) => void;
   className?: string;
   style?: React.CSSProperties;
 }
 
 export const DEFAULT_TEMPLATE_COLOR = "#f0b35a";
 
-/** Left column: the Root structure plus every template, always visible. */
-export default function Sidebar({ doc, colors, section, uses, onSelect, onAddTemplate, className, style }: SidebarProps) {
+const STARTERS = starterBlocks();
+
+/** Left column: the Root structure plus every block (template), always visible. */
+export default function Sidebar({ doc, colors, section, uses, onSelect, onAddTemplate, onAddStarter, className, style }: SidebarProps) {
   const [filter, setFilter] = useState("");
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -53,8 +59,8 @@ export default function Sidebar({ doc, colors, section, uses, onSelect, onAddTem
       </button>
 
       <div className="side-head">
-        <div className="section-label">Templates · {doc.templateOrder.length}</div>
-        <button type="button" className="icon-btn boxed" title="New template" aria-label="New template" onClick={() => setAdding(true)}>
+        <div className="section-label">Blocks · {doc.templateOrder.length}</div>
+        <button type="button" className="icon-btn boxed" title="Make a new block" aria-label="Make a new block" onClick={() => setAdding(true)}>
           <PlusIcon />
         </button>
       </div>
@@ -63,8 +69,8 @@ export default function Sidebar({ doc, colors, section, uses, onSelect, onAddTem
         <input
           className="text-input"
           autoFocus
-          aria-label="New template name"
-          placeholder="Template name"
+          aria-label="New block name"
+          placeholder="Block name"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onBlur={commitAdd}
@@ -83,8 +89,8 @@ export default function Sidebar({ doc, colors, section, uses, onSelect, onAddTem
         <label className="search-field">
           <SearchIcon />
           <input
-            aria-label="Filter templates"
-            placeholder="Filter templates"
+            aria-label="Filter blocks"
+            placeholder="Filter blocks"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             onKeyDown={(e) => e.stopPropagation()}
@@ -109,7 +115,7 @@ export default function Sidebar({ doc, colors, section, uses, onSelect, onAddTem
                 e.dataTransfer.effectAllowed = "copy";
               }}
               onClick={() => onSelect({ kind: "template", name })}
-              title={`${name}: inserted ${count} ${count === 1 ? "time" : "times"}. Drag onto a folder to insert it.`}
+              title={`${name}: used ${count} ${count === 1 ? "time" : "times"}. Drag it onto a folder to put it there.`}
             >
               <span className="side-dot" style={{ background: colors[name] ?? DEFAULT_TEMPLATE_COLOR }} />
               <span className="side-name">{name}</span>
@@ -119,13 +125,30 @@ export default function Sidebar({ doc, colors, section, uses, onSelect, onAddTem
         })}
         {doc.templateOrder.length === 0 && (
           <p className="side-hint">
-            Templates are reusable sets of folders. Create one, then insert it wherever it is needed.
+            A block is a ready-made set of folders you can reuse. Make one, or add a starter block below.
           </p>
         )}
-        {doc.templateOrder.length > 0 && shown.length === 0 && <p className="side-hint">No template matches “{filter}”.</p>}
+        {doc.templateOrder.length > 0 && shown.length === 0 && <p className="side-hint">No block matches “{filter}”.</p>}
       </div>
 
-      {doc.templateOrder.length > 0 && <p className="side-hint drag-hint">Drag a template onto a folder to insert it there.</p>}
+      {doc.templateOrder.length > 0 && <p className="side-hint">Drag a block onto a folder to put it there.</p>}
+
+      <div className="side-head">
+        <div className="section-label">Starter blocks</div>
+      </div>
+      <div className="side-list">
+        {STARTERS.map((st) => (
+          <div className="starter" key={st.name}>
+            <span className="starter-text">
+              <b>{st.title}</b>
+              <small>{st.hint}</small>
+            </span>
+            <button type="button" className="btn small" onClick={() => onAddStarter(st)} title={`Add the ${st.title} block to this structure`}>
+              <PlusIcon /> Add
+            </button>
+          </div>
+        ))}
+      </div>
     </nav>
   );
 }

@@ -11,6 +11,8 @@ import { removeNode, insertChild, updateNode, moveNode, insertRelative, makeInse
 import { makeFolder } from "../src/lib/treeEdit";
 import { reconcileIds, cloneWithNewIds } from "../src/lib/ids";
 import { planTree, nameProblem } from "../src/lib/validate";
+import { buildKit, buildKitDocument, cleanNames, defaultKitOptions, starterBlocks, uniqueTemplateName } from "../src/lib/kit";
+import { renamedNode, moveSibling } from "../src/lib/treeEdit";
 import { scanDestination, createOnDisk } from "../src/lib/folders";
 import { isFileNode } from "../src/lib/types";
 import type { FsNode } from "../src/lib/types";
@@ -308,6 +310,44 @@ console.log(`\n== behavior checks ==`);
   check(countTemplateUses([d.root, d.templates["T"]])["T"] === 2, "template uses counted");
   check(countOwnNodes(d.root) === 2, "own nodes exclude @insert lines");
   check(cleanTemplateName("  My Template ") === "My_Template" && cleanTemplateName("@X") === "X", "template names become one token");
+}
+
+{
+  // ---- kit generator: answers -> a complete, valid .fh ----
+  const o = { ...defaultKitOptions(2026), topFolder: "STUDIO" };
+  const text = buildKit(o);
+  const { doc, issues } = parseFh(text);
+  check(!!doc && issues.length === 0, "kit output parses with no issues");
+  if (doc) {
+    check(doc.templateOrder.join(",") === "YEARS,PROJECT", `kit makes one block per deeper level + PROJECT (${doc.templateOrder.join(",")})`);
+    const top = doc.root[0];
+    check(top.name === "STUDIO" && top.children.map((n) => n.name).join(",") === "01_Design,02_Production,03_Library,04_Admin,05_Archive", `top folders numbered (${top.children.map((n) => n.name).join(",")})`);
+    const r = resolveDoc(doc);
+    const plan = planTree(r.tree);
+    check(r.errors.length === 0 && plan.errors === 0 && plan.duplicates === 0, "kit output resolves and validates");
+    // STUDIO + 5 top + 2 depts x 2 years x (year + project + 7) = 1 + 5 + 4*9
+    check(countNodes(plan.tree).folders === 42, `kit folder count (${countNodes(plan.tree).folders})`);
+    check(serializeFh(doc) === text, "kit output is already in canonical form");
+  }
+  const flat = parseFh(buildKit({ ...defaultKitOptions(2026), sortBy: [], extras: [], numberTop: false })).doc!;
+  check(flat.root.length === 1 && flat.root[0].name === "Project-Name" && flat.templateOrder.join() === "PROJECT", "no sorting: just a project");
+  const bare = buildKitDocument({ ...defaultKitOptions(2026), sortBy: ["client"], projectFolders: [], extras: [] });
+  check(bare.templateOrder.length === 0 && bare.root.map((n) => n.name).join(",") === "01_Client-A,02_Client-B", "no project folders: no PROJECT block");
+  check(cleanNames([" A ", "a", "", "#x", "B/"]).join(",") === "A,B", "kit names are trimmed, de-duplicated and filtered");
+  // starter blocks
+  const starters = starterBlocks(2026);
+  check(starters.length === 4 && starters.every((s) => s.build().length > 0), "starter blocks build");
+  check(uniqueTemplateName("PROJECT", { PROJECT: 1, PROJECT_2: 1 }) === "PROJECT_3", "starter names avoid clashes");
+  // shared rename rule + sibling move
+  const f = makeFolder("Docs");
+  const r1 = renamedNode(f, "v1.2");
+  check(!!r1 && "node" in r1 && r1.node.forceFolder === true, "rename keeps a folder a folder");
+  const r2 = renamedNode(f, "#bad");
+  check(!!r2 && "error" in r2, "rename rejects names starting with #");
+  check(renamedNode(f, " Docs ") === null, "rename to the same name is a no-op");
+  const t3 = parseFh(`@root\nA\nB\nC\n`).doc!.root;
+  check(moveSibling(t3, t3[2].id, -1).map((n) => n.name).join("") === "ACB", "moveSibling moves up");
+  check(moveSibling(t3, t3[0].id, -1) === t3, "moveSibling at the edge is a no-op");
 }
 
 // ---- dry run + create against an in-memory folder ----

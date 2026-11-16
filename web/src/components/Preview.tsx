@@ -64,8 +64,8 @@ export default function Preview({ tree, templateColors }: PreviewProps) {
             className="from-dot"
             style={{ background: templateColors[node.from] ?? DEFAULT_TEMPLATE_COLOR }}
             role="img"
-            aria-label={`from template ${node.from}`}
-            title={`From template ${node.from}`}
+            aria-label={`from the block ${node.from}`}
+            title={`From the block ${node.from}`}
           />
         )}
         {hasChildren && <span className="badge">{node.children.length}</span>}

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FsNode } from "../lib/types";
-import { isFileLike, isFileNode } from "../lib/types";
+import { isFileNode } from "../lib/types";
 import { cloneWithNewIds } from "../lib/ids";
-import { cleanTemplateName, insertChild, insertRelative, makeFile, makeFolder, makeInsert, moveNode, removeNode } from "../lib/treeEdit";
+import { cleanTemplateName, insertChild, insertRelative, makeFile, makeFolder, makeInsert, moveNode, removeNode, renamedNode } from "../lib/treeEdit";
 import { ChevronIcon, CopyIcon, FileIcon, FolderIcon, GripIcon, PlusChildIcon, PlusIcon, XIcon } from "./icons";
 import ColorPicker from "./ColorPicker";
 
@@ -33,6 +33,12 @@ interface DesignerProps {
   onCollapsedChange?: (id: string, collapsed: boolean) => void;
   /** Short message for the user (e.g. a rejected name). */
   onNotice?: (message: string) => void;
+  /**
+   * Templates already being shown above this one (inline expansion nests
+   * Designers). A template that inserts itself, directly or through others,
+   * is not expanded again, so a circular file cannot recurse forever.
+   */
+  expansionChain?: string[];
 }
 
 interface DropState {
@@ -52,12 +58,13 @@ interface MenuState {
   childOf: boolean;
 }
 
-type AddSpec =
+export type AddSpec =
   | { kind: "folder" }
   | { kind: "file" }
   | { kind: "insert"; template: string };
 
-export default function Designer({ nodes, section, templates, onNodesChange, templateMap, templateColors, expandedInserts, onToggleInsert, onTemplateNodesChange, onAddTemplate, onRenameTemplate, onSetTemplateColor, collapsed: collapsedProp, onCollapsedChange, onNotice }: DesignerProps) {
+export default function Designer({ nodes, section, templates, onNodesChange, templateMap, templateColors, expandedInserts, onToggleInsert, onTemplateNodesChange, onAddTemplate, onRenameTemplate, onSetTemplateColor, collapsed: collapsedProp, onCollapsedChange, onNotice, expansionChain }: DesignerProps) {
+  const chain = expansionChain ?? (section.kind === "template" && section.name ? [section.name] : []);
   const [localCollapsed, setLocalCollapsed] = useState<Set<string>>(new Set());
   const collapsed = collapsedProp ?? localCollapsed;
   const setCollapsedFor = (id: string, value: boolean) => {
@@ -172,24 +179,14 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
   const renameAt = (path: number[], name: string) => {
     setEditing(null);
     const current = nodeAt(nodes, path);
-    // A trailing slash is the .fh way to say "folder"; it is not part of the name.
-    const clean = name.trim().replace(/[\\/]+$/, "").trim();
-    if (!current || !clean || clean === current.name) return;
-    if (/^[#@]/.test(clean) || clean.includes('"')) {
-      onNotice?.("Names can't start with # or @, or contain quotes.");
+    if (!current) return;
+    const result = renamedNode(current, name);
+    if (!result) return;
+    if ("error" in result) {
+      onNotice?.(result.error);
       return;
     }
-    // Renaming never turns a folder into a file: a folder given a dotted name
-    // stays a folder (written as `name/` in the source).
-    const wasFolder = !isFileNode(current);
-    onNodesChange(
-      updateByPath(nodes, path, (n) => {
-        const next: FsNode = { ...n, name: clean };
-        if (wasFolder && isFileLike(clean)) next.forceFolder = true;
-        else delete next.forceFolder;
-        return next;
-      }),
-    );
+    onNodesChange(updateByPath(nodes, path, () => result.node));
     setFocusId(current.id);
   };
 
@@ -274,7 +271,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
       node.kind === "insert" ? "type-insert" : isFile ? "type-file" : "type-folder";
     const insertColor = node.kind === "insert" ? templateColors?.[node.name] : undefined;
     const hasInsertChildren = node.kind === "insert" && node.children.length > 0;
-    const isExpanded = node.kind === "insert" && expandedInserts?.has(node.id);
+    const isExpanded = node.kind === "insert" && !chain.includes(node.name) && !!expandedInserts?.has(node.id);
     // Use template color for @insert nodes, otherwise undefined
     const nodeColor = node.kind === "insert" ? templateColors?.[node.name] : undefined;
 
@@ -294,7 +291,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
           }}
           onKeyDown={(e) => onRowKeyDown(e, node, path)}
           style={{ marginLeft: depth * 20, ...(hasInsertChildren && insertColor ? { borderLeftColor: insertColor, borderLeftWidth: 3, borderLeftStyle: "solid" } : {}) }}
-          title={node.kind === "insert" ? `Double-click to ${isExpanded ? "collapse" : "expand"} template "${node.name}"` : undefined}
+          title={node.kind === "insert" ? `Double-click to ${isExpanded ? "close" : "open"} the block "${node.name}"` : undefined}
           onDoubleClick={node.kind === "insert" && onToggleInsert ? () => onToggleInsert(node.id) : undefined}
           onDragOver={(e) => {
             const isTemplate = e.dataTransfer.types.includes(TEMPLATE_MIME);
@@ -359,7 +356,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
             {node.kind === "insert" ? (
               <span className="insert-picker">
                 <select
-                  aria-label="Template to insert"
+                  aria-label="Block to insert"
                   value={node.name}
                   onChange={(e) => onNodesChange(updateName(nodes, node.id, e.target.value))}
                   onDragOver={(e) => e.stopPropagation()}
@@ -408,7 +405,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
                 <PlusIcon />
               </IconButton>
               <IconButton
-                title={insertable ? "Add child" : "@insert children come from the template"}
+                title={insertable ? "Add child" : "A block's contents come from the block itself"}
                 disabled={!insertable}
                 onClick={(e) => openMenu({ parentId: node.id, index: children.length, childOf: true }, e)}
               >
@@ -429,7 +426,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
             </span>
         </div>
 
-        {node.kind === "insert" && expandedInserts?.has(node.id) && templateMap?.[node.name] && (
+        {isExpanded && templateMap?.[node.name] && (
           <div className="insert-expanded" style={{ marginLeft: (depth + 1) * 20, "--template-color": templateColors?.[node.name] ?? "#f0b35a" } as React.CSSProperties}>
             <div className="insert-expanded-header">
               {editingTemplateName?.id === node.name ? (
@@ -462,7 +459,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
                   className="insert-expanded-name"
                   value={node.name}
                   readOnly
-                  title="Double-click to rename template"
+                  title="Double-click to rename this block"
                   onDoubleClick={() => setEditingTemplateName({ id: node.name, value: node.name })}
                 />
               )}
@@ -474,7 +471,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
               )}
               <button
                 className="icon-btn"
-                title="Collapse template"
+                title="Close this block"
                 onClick={() => onToggleInsert?.(node.id)}
               >
                 <XIcon />
@@ -496,6 +493,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
               collapsed={collapsedProp}
               onCollapsedChange={onCollapsedChange}
               onNotice={onNotice}
+              expansionChain={[...chain, node.name]}
             />
           </div>
         )}
@@ -531,8 +529,8 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
         <div className="empty-hint">
           <div className="big"><FolderIcon size={28} /></div>
           {section.kind === "root"
-            ? "Nothing here yet. Add folders or files, or drag a template in from the left."
-            : `Template "${section.name}" is empty. Add folders, or insert another template.`}
+            ? "Nothing here yet. Add folders or files, or drag a block in from the left."
+            : `The block "${section.name}" is empty. Add folders, or insert another block.`}
           <div style={{ marginTop: 12, display: "flex", justifyContent: "center", gap: 6 }}>
             <AddButton
               label="Add…"
@@ -574,13 +572,13 @@ function AddButton({
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   return (
-    <button className="btn" onClick={onClick} onMouseDown={(e) => e.stopPropagation()} title="Add a folder, file or template">
+    <button className="btn" onClick={onClick} onMouseDown={(e) => e.stopPropagation()} title="Add a folder, file or block">
       <PlusIcon /> {label}
     </button>
   );
 }
 
-function PlusDropdown({
+export function PlusDropdown({
   anchor,
   targetLabel,
   templates,
@@ -635,7 +633,7 @@ function PlusDropdown({
         <span className="ic"><FileIcon /></span> File
       </button>
       <div className="dd-sep" />
-      <div className="dd-title">Insert structure</div>
+      <div className="dd-title">Insert a block</div>
       {templates.length ? (
         templates.map((t) => (
           <button key={t} className="dd-item mono" onClick={() => onAdd({ kind: "insert", template: t })}>
@@ -643,7 +641,7 @@ function PlusDropdown({
           </button>
         ))
       ) : (
-        <div className="dd-empty">No structures yet — create one below.</div>
+        <div className="dd-empty">No blocks yet. Create one below.</div>
       )}
       {onAddTemplate && (
         <>
@@ -689,7 +687,7 @@ function PlusDropdownCreateTemplate({
         <input
           className="name-input small"
           autoFocus
-          placeholder="New template name"
+          placeholder="New block name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           onBlur={commit}
@@ -706,7 +704,7 @@ function PlusDropdownCreateTemplate({
 
   return (
     <button className="dd-item" onClick={() => setCreating(true)}>
-      <span className="ic"><PlusIcon /></span> New template…
+      <span className="ic"><PlusIcon /></span> New block…
     </button>
   );
 }

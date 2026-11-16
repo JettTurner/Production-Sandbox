@@ -1,5 +1,5 @@
 import type { FsNode } from "./types";
-import { newId } from "./types";
+import { isFileLike, isFileNode, newId } from "./types";
 
 export interface Located {
   container: FsNode[];
@@ -179,4 +179,39 @@ export function removeTemplateRefs(nodes: FsNode[], name: string): FsNode[] {
     result.push({ ...n, children: removeTemplateRefs(n.children, name) });
   }
   return result;
+}
+/**
+ * The one rule for renaming a folder or file, shared by every view.
+ * Returns the renamed node, an error message for the user, or null when
+ * nothing changes. Renaming never turns a folder into a file: a folder given a
+ * dotted name stays a folder (written as `name/` in the source).
+ */
+export function renamedNode(node: FsNode, raw: string): { node: FsNode } | { error: string } | null {
+  // A trailing slash is the .fh way to say "folder"; it is not part of the name.
+  const clean = raw.trim().replace(/[\\/]+$/, "").trim();
+  if (!clean || clean === node.name) return null;
+  if (/^[#@]/.test(clean) || clean.includes('"')) {
+    return { error: "Names can't start with # or @, or contain quotes." };
+  }
+  const wasFolder = !isFileNode(node);
+  const next: FsNode = { ...node, name: clean };
+  if (wasFolder && isFileLike(clean)) next.forceFolder = true;
+  else delete next.forceFolder;
+  return { node: next };
+}
+
+/** Move a node one place up or down among its siblings. */
+export function moveSibling(root: FsNode[], id: string, dir: -1 | 1): FsNode[] {
+  const path = findPath(root, id);
+  if (!path) return root;
+  const here = path[path.length - 1];
+  const target = here.index + dir;
+  if (target < 0 || target >= here.container.length) return root;
+  const parent = path.length > 1 ? path[path.length - 2].node.id : null;
+  return insertChild(removeNode(root, id), parent, target, here.node);
+}
+
+/** Insert `node` right after the sibling with id `afterId`. */
+export function insertAfter(root: FsNode[], afterId: string, node: FsNode): FsNode[] {
+  return insertRelative(root, afterId, "after", node);
 }

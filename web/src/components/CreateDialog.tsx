@@ -171,10 +171,10 @@ export default function CreateDialog({ doc, initialTemplate, onClose }: CreateDi
                     onChange={() => setScope(doc.templateOrder[0] ?? "")}
                   />
                   <span>
-                    <b>One template</b>
-                    <small>Stamp out a single template, for example one new project</small>
+                    <b>One block</b>
+                    <small>Stamp out a single block, for example one new project</small>
                     {scope !== "" && (
-                      <select aria-label="Template" value={scope} onChange={(e) => setScope(e.target.value)}>
+                      <select aria-label="Block" value={scope} onChange={(e) => setScope(e.target.value)}>
                         {doc.templateOrder.map((t) => (
                           <option key={t} value={t}>
                             {t}

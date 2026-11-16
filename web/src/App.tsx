@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ColumnResizer from "./components/ColumnResizer";
 import CreateDialog from "./components/CreateDialog";
 import EditorPane from "./components/EditorPane";
-import type { EditorMode } from "./components/EditorPane";
+import type { EditorView } from "./components/EditorPane";
+import NewDialog from "./components/NewDialog";
 import OutputPane from "./components/OutputPane";
 import Sidebar from "./components/Sidebar";
 import type { SectionRef } from "./components/Designer";
@@ -18,7 +19,9 @@ import {
   WarningIcon,
 } from "./components/icons";
 import { normalizeSource, useFhDocument } from "./hooks/useFhDocument";
-import { countNodes, resolveDoc, treeToText } from "./lib/resolver";
+import { countNodes, resolveDoc, resolveTree, treeToText } from "./lib/resolver";
+import { uniqueTemplateName } from "./lib/kit";
+import type { StarterBlock } from "./lib/kit";
 import {
   copyText,
   downloadBlob,
@@ -53,12 +56,16 @@ const DEFAULT_SOURCE = `@version 1.0
 \t03_ReferenceFiles
 `;
 
-const BLANK_SOURCE = `@version 1.0
-@name Untitled Structure
-
-#---Root---
-@root
-`;
+const VIEW_KEY = "fh-view";
+function storedView(): EditorView {
+  try {
+    const v = localStorage.getItem(VIEW_KEY);
+    if (v === "columns" || v === "list" || v === "blocks") return v;
+  } catch {
+    /* storage unavailable: use the default */
+  }
+  return "blocks";
+}
 
 const SAMPLES: { value: string; label: string }[] = [
   { value: "startup", label: "Startup / Default" },
@@ -94,7 +101,11 @@ export default function App() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [fileHandle, setFileHandle] = useState<FileSystemFileHandle | null>(null);
   const [section, setSection] = useState<SectionRef>({ kind: "root" });
-  const [mode, setMode] = useState<EditorMode>("tree");
+  const [view, setViewState] = useState<EditorView>(storedView);
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
+  // Bumped whenever a different document is loaded, so views reset their place in it.
+  const [docKey, setDocKey] = useState(0);
   const [mobileTab, setMobileTab] = useState<MobileTab>("structure");
   const [sidebarW, setSidebarW] = useState(252);
   const [outputW, setOutputW] = useState(400);
@@ -110,6 +121,14 @@ export default function App() {
     setToasts((prev) => [...prev, { id, type, msg }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4200);
   }, []);
+  const setView = useCallback((v: EditorView) => {
+    setViewState(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* not remembered, still works */
+    }
+  }, []);
   const notice = useCallback((msg: string) => notify(msg, "error"), [notify]);
 
   // ---------------- Derived output ----------------
@@ -117,6 +136,14 @@ export default function App() {
   const plan = useMemo(() => planTree(resolved.tree), [resolved.tree]);
   const stats = useMemo(() => countNodes(plan.tree), [plan.tree]);
   const uses = useMemo(() => countTemplateUses([doc.root, ...Object.values(doc.templates)]), [doc]);
+  // What each block creates on its own (shown on bricks in the Blocks view).
+  const blockSizes = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const name of doc.templateOrder) {
+      out[name] = countNodes(planTree(resolveTree(doc.templates[name] ?? [], doc.templates).tree).tree).total;
+    }
+    return out;
+  }, [doc.templateOrder, doc.templates]);
   // Display colors: templates without a color in the file get one from the
   // palette by position, so they can be told apart. Nothing is written back
   // until the user actually picks a color.
@@ -138,7 +165,7 @@ export default function App() {
 
   const selectSection = useCallback((next: SectionRef) => {
     setSection(next);
-    setMode("tree");
+    setSourceOpen(false);
     setMobileTab("structure");
   }, []);
 
@@ -151,12 +178,13 @@ export default function App() {
   );
 
   const openText = useCallback(
-    (text: string, name: string | null, handle: FileSystemFileHandle | null) => {
-      load(text);
+    (text: string, name: string | null, handle: FileSystemFileHandle | null, unsaved = false) => {
+      load(text, unsaved);
       setFileName(name);
       setFileHandle(handle);
       setSection({ kind: "root" });
       setNameDraft(null);
+      setDocKey((k) => k + 1);
     },
     [load],
   );
@@ -185,6 +213,7 @@ export default function App() {
   const loadSample = async (value: string) => {
     setMoreOpen(false);
     if (!confirmDiscard()) return;
+    setNewOpen(false);
     try {
       const res = await fetch(`${import.meta.env.BASE_URL}samples/${value}.fh`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -230,9 +259,13 @@ export default function App() {
     }
   }, [fh, fileHandle, notify, saveAs, source]);
 
-  const newDoc = () => {
+  // New opens the "start from a kit" dialog; it hands back finished .fh text.
+  const newDoc = () => setNewOpen(true);
+  const createFromKit = (text: string) => {
     if (!confirmDiscard()) return;
-    openText(BLANK_SOURCE, null, null);
+    setNewOpen(false);
+    // Generated content exists nowhere else yet, so it starts out as unsaved.
+    openText(text, null, null, true);
   };
 
   // On boot, load the startup sample so the shipped file is the single source
@@ -289,7 +322,7 @@ export default function App() {
     const name = cleanTemplateName(raw);
     if (!name) return null;
     if (doc.templates[name]) {
-      notify(`Template "${name}" already exists.`, "error");
+      notify(`A block called "${name}" already exists.`, "error");
       return null;
     }
     commitDoc((d) => ({
@@ -299,7 +332,7 @@ export default function App() {
       templateColors: { ...d.templateColors, [name]: TEMPLATE_PALETTE[d.templateOrder.length % TEMPLATE_PALETTE.length] },
       templateComments: d.templateOrder.length
         ? d.templateComments
-        : { ...d.templateComments, [name]: ["#---Templates---"] },
+        : { ...d.templateComments, [name]: ["#---Blocks---"] },
     }));
     return name;
   };
@@ -308,8 +341,13 @@ export default function App() {
     const name = createTemplate(raw, []);
     if (name) {
       selectSection({ kind: "template", name });
-      notify(`Added template "${name}".`);
+      notify(`Added the block "${name}".`);
     }
+  };
+
+  const addStarter = (starter: StarterBlock) => {
+    const name = createTemplate(uniqueTemplateName(starter.name, doc.templates), starter.build());
+    if (name) notify(`Added the ${starter.title} block as "${name}". Drag it onto a folder to use it.`);
   };
 
   // "New template…" from a row's Add menu: the menu inserts it right after.
@@ -321,7 +359,7 @@ export default function App() {
     const newName = cleanTemplateName(raw);
     if (!newName || newName === oldName) return;
     if (doc.templates[newName]) {
-      notify(`Template "${newName}" already exists.`, "error");
+      notify(`A block called "${newName}" already exists.`, "error");
       return;
     }
     const swap = <T,>(rec: Record<string, T>): Record<string, T> =>
@@ -355,7 +393,7 @@ export default function App() {
       templateColors: drop(d.templateColors),
       templateComments: drop(d.templateComments),
     }));
-    notify(`Deleted template "${name}" and its @insert lines. Undo brings it back.`);
+    notify(`Deleted the block "${name}" everywhere it was used. Undo brings it back.`);
   };
 
   const setColor = (name: string, color: string) =>
@@ -449,7 +487,7 @@ export default function App() {
 
   const tabs: { id: MobileTab; label: string; icon: React.ReactNode }[] = [
     { id: "structure", label: "Structure", icon: <TreeIcon size={18} /> },
-    { id: "templates", label: "Templates", icon: <TemplatesIcon size={18} /> },
+    { id: "templates", label: "Blocks", icon: <TemplatesIcon size={18} /> },
     { id: "output", label: "Output", icon: <OutputIcon size={18} /> },
   ];
 
@@ -550,6 +588,7 @@ export default function App() {
           uses={uses}
           onSelect={selectSection}
           onAddTemplate={addTemplate}
+          onAddStarter={addStarter}
         />
         <ColumnResizer onResize={(dx) => setSidebarW((w) => clamp(w + dx, SIDEBAR_MIN, SIDEBAR_MAX))} />
         <EditorPane
@@ -557,8 +596,13 @@ export default function App() {
           doc={doc}
           colors={colors}
           section={section}
-          mode={mode}
-          onModeChange={setMode}
+          view={view}
+          onViewChange={setView}
+          sourceOpen={sourceOpen}
+          onSourceOpenChange={setSourceOpen}
+          blockSizes={blockSizes}
+          docKey={docKey}
+          onSelectSection={selectSection}
           source={source}
           onSourceChange={(text) => applySource(normalizeSource(text))}
           issues={fh.issues}
@@ -593,7 +637,7 @@ export default function App() {
             ? `${errorCount} ${errorCount === 1 ? "error" : "errors"} · ${warningCount} ${warningCount === 1 ? "warning" : "warnings"}`
             : "No problems found"}
         </span>
-        <span className="status-tip">Double-click to rename · Drag to move · Arrow keys to navigate · Del to delete</span>
+        <span className="status-tip">Double-click to rename · Arrow keys to move around · Del to delete · Drag a block onto a folder</span>
       </footer>
 
       <nav className="mobile-tabs" aria-label="Sections">
@@ -610,6 +654,10 @@ export default function App() {
           </button>
         ))}
       </nav>
+
+      {newOpen && (
+        <NewDialog samples={SAMPLES} onCreate={createFromKit} onLoadSample={loadSample} onClose={() => setNewOpen(false)} />
+      )}
 
       {createOpen && (
         <CreateDialog

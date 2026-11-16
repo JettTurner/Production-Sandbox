@@ -1,21 +1,39 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FhDocument, FsNode, ParseIssue } from "../lib/types";
+import { isFileNode } from "../lib/types";
+import BlocksView from "./BlocksView";
 import CodePane from "./CodePane";
+import ColumnsView from "./ColumnsView";
 import ColorPicker from "./ColorPicker";
 import Designer from "./Designer";
 import type { SectionRef } from "./Designer";
 import { DEFAULT_TEMPLATE_COLOR } from "./Sidebar";
-import { PencilIcon, XIcon } from "./icons";
+import { CodeIcon, PencilIcon, XIcon } from "./icons";
 
-export type EditorMode = "tree" | "source";
+/** The three ways to look at and edit a section. */
+export type EditorView = "columns" | "list" | "blocks";
+
+export const EDITOR_VIEWS: { id: EditorView; label: string; title: string }[] = [
+  { id: "columns", label: "Columns", title: "One column per level, like a file browser" },
+  { id: "list", label: "List", title: "The whole section as one indented list" },
+  { id: "blocks", label: "Blocks", title: "Folders as cards, with drag-in blocks" },
+];
 
 interface EditorPaneProps {
   doc: FhDocument;
   /** Display color per template (file colors plus palette fallbacks). */
   colors: Record<string, string>;
   section: SectionRef;
-  mode: EditorMode;
-  onModeChange: (mode: EditorMode) => void;
+  view: EditorView;
+  onViewChange: (view: EditorView) => void;
+  /** Show the whole .fh file as text instead of the view. */
+  sourceOpen: boolean;
+  onSourceOpenChange: (open: boolean) => void;
+  /** Folders + files each block creates when resolved. */
+  blockSizes: Record<string, number>;
+  /** Changes when a different document is loaded. */
+  docKey: number;
+  onSelectSection: (section: SectionRef) => void;
   source: string;
   onSourceChange: (value: string) => void;
   issues: ParseIssue[];
@@ -38,13 +56,55 @@ function toggleIn(set: Set<string>, id: string, value?: boolean): Set<string> {
   return next;
 }
 
+/**
+ * Everything that can be opened or closed in a section: folders with children,
+ * and @insert lines (which expand their template in place). Follows inserts
+ * into their templates, each template once.
+ */
+function expandableIds(nodes: FsNode[], templates: Record<string, FsNode[]>): { folders: string[]; inserts: string[] } {
+  const folders: string[] = [];
+  const inserts: string[] = [];
+  const seen = new Set<string>();
+  const walk = (list: FsNode[]) => {
+    for (const n of list) {
+      if (n.kind === "insert") {
+        if (!templates[n.name]) continue;
+        inserts.push(n.id);
+        if (!seen.has(n.name)) {
+          seen.add(n.name);
+          walk(templates[n.name]);
+        }
+      } else if (!isFileNode(n) && n.children.length > 0) {
+        folders.push(n.id);
+        walk(n.children);
+      }
+    }
+  };
+  walk(nodes);
+  return { folders, inserts };
+}
+
+function withAll(set: Set<string>, ids: string[], on: boolean): Set<string> {
+  const next = new Set(set);
+  for (const id of ids) {
+    if (on) next.add(id);
+    else next.delete(id);
+  }
+  return next;
+}
+
 /** Centre column: one editor for the selected section, as a tree or as source text. */
 export default function EditorPane({
   doc,
   colors,
   section,
-  mode,
-  onModeChange,
+  view,
+  onViewChange,
+  sourceOpen,
+  onSourceOpenChange,
+  blockSizes,
+  docKey,
+  onSelectSection,
   source,
   onSourceChange,
   issues,
@@ -72,6 +132,16 @@ export default function EditorPane({
   const nodes = templateName ? doc.templates[templateName] ?? [] : doc.root;
   const errors = issues.filter((i) => i.severity === "error");
 
+  // Expand / collapse for the section being edited. Folders and templates are
+  // separate switches: "Expand folders" opens every folder and leaves templates
+  // closed; "Expand all" also opens every inserted template in place.
+  const setAll = (foldersOpen: boolean, templatesOpen: boolean) => {
+    const ids = expandableIds(nodes, doc.templates);
+    setCollapsed((prev) => withAll(prev, ids.folders, !foldersOpen));
+    setExpandedInserts((prev) => withAll(prev, ids.inserts, templatesOpen));
+  };
+  const hasInserts = expandableIds(nodes, doc.templates).inserts.length > 0;
+
   const commitRename = () => {
     const next = renaming?.trim();
     if (templateName && next && next !== templateName) onRenameTemplate(templateName, next);
@@ -81,7 +151,7 @@ export default function EditorPane({
   return (
     <section className={`editor ${className ?? ""}`} aria-label="Editor">
       <div className="editor-head">
-        {mode === "source" ? (
+        {sourceOpen ? (
           <>
             <h1 className="editor-title">Source</h1>
             <span className="editor-meta">the whole .fh file · {source.split("\n").length} lines</span>
@@ -92,7 +162,7 @@ export default function EditorPane({
           <input
             className="text-input mono title-input"
             autoFocus
-            aria-label="Template name"
+            aria-label="Block name"
             value={renaming}
             onChange={(e) => setRenaming(e.target.value)}
             onBlur={commitRename}
@@ -107,16 +177,16 @@ export default function EditorPane({
             <ColorPicker value={colors[templateName] ?? DEFAULT_TEMPLATE_COLOR} onChange={(c) => onSetColor(templateName, c)} />
             <h1 className="editor-title mono" title={templateName}>{templateName}</h1>
             <span className="editor-meta">
-              {uses[templateName] ? `inserted ${uses[templateName]}×` : "not inserted anywhere"}
+              {uses[templateName] ? `used ${uses[templateName]}×` : "not used anywhere yet"}
             </span>
-            <button type="button" className="icon-btn" title="Rename template" aria-label="Rename template" onClick={() => setRenaming(templateName)}>
+            <button type="button" className="icon-btn" title="Rename this block" aria-label="Rename this block" onClick={() => setRenaming(templateName)}>
               <PencilIcon />
             </button>
             <button
               type="button"
               className="icon-btn danger"
-              title="Delete template (also removes its @insert lines)"
-              aria-label="Delete template"
+              title="Delete this block (also removes it everywhere it is used)"
+              aria-label="Delete this block"
               onClick={() => onDeleteTemplate(templateName)}
             >
               <XIcon />
@@ -124,44 +194,62 @@ export default function EditorPane({
           </>
         )}
         <div className="spacer" />
-        <div className="segmented" role="group" aria-label="Editor view">
-          <button type="button" className={mode === "tree" ? "active" : ""} aria-pressed={mode === "tree"} onClick={() => onModeChange("tree")}>
-            Tree
-          </button>
-          <button
-            type="button"
-            className={mode === "source" ? "active" : ""}
-            aria-pressed={mode === "source"}
-            onClick={() => onModeChange("source")}
-            title="Edit the whole .fh file as text"
-          >
-            Source{errors.length ? ` · ${errors.length}` : ""}
-          </button>
+        {!sourceOpen && view === "list" && (
+          <div className="editor-tools">
+            {hasInserts && (
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => setAll(true, false)}
+                title="Open every folder; leave blocks closed"
+              >
+                Expand folders
+              </button>
+            )}
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => setAll(true, true)}
+              title={hasInserts ? "Open every folder and every block" : "Open every folder"}
+            >
+              Expand all
+            </button>
+            <button type="button" className="link-btn" onClick={() => setAll(false, false)} title="Close every folder and block">
+              Collapse all
+            </button>
+          </div>
+        )}
+        <div className="segmented" role="group" aria-label="View">
+          {EDITOR_VIEWS.map((v) => (
+            <button
+              type="button"
+              key={v.id}
+              className={!sourceOpen && view === v.id ? "active" : ""}
+              aria-pressed={!sourceOpen && view === v.id}
+              title={v.title}
+              onClick={() => {
+                onViewChange(v.id);
+                onSourceOpenChange(false);
+              }}
+            >
+              {v.label}
+            </button>
+          ))}
         </div>
+        <button
+          type="button"
+          className={`btn icon source-toggle ${sourceOpen ? "active" : ""}`}
+          aria-pressed={sourceOpen}
+          aria-label="Source text"
+          title="Edit the whole .fh file as text"
+          onClick={() => onSourceOpenChange(!sourceOpen)}
+        >
+          <CodeIcon />
+          {errors.length > 0 && <span className="badge-dot" />}
+        </button>
       </div>
 
-      {mode === "tree" ? (
-        <div className="editor-body">
-          <Designer
-            key={templateName ?? "@root"}
-            nodes={nodes}
-            section={section}
-            templates={doc.templateOrder}
-            onNodesChange={templateName ? (n) => onTemplateNodesChange(templateName, n) : onRootChange}
-            templateMap={doc.templates}
-            templateColors={colors}
-            expandedInserts={expandedInserts}
-            onToggleInsert={onToggleInsert}
-            onTemplateNodesChange={onTemplateNodesChange}
-            onAddTemplate={onCreateTemplate}
-            onRenameTemplate={onRenameTemplate}
-            onSetTemplateColor={onSetColor}
-            collapsed={collapsed}
-            onCollapsedChange={onCollapsedChange}
-            onNotice={onNotice}
-          />
-        </div>
-      ) : (
+      {sourceOpen ? (
         <>
           <div className="editor-body code">
             <CodePane source={source} onChange={onSourceChange} />
@@ -180,6 +268,46 @@ export default function EditorPane({
             </div>
           )}
         </>
+      ) : view === "list" ? (
+        <div className="editor-body">
+          <Designer
+            key={`${docKey}:${templateName ?? "@root"}`}
+            nodes={nodes}
+            section={section}
+            templates={doc.templateOrder}
+            onNodesChange={templateName ? (n) => onTemplateNodesChange(templateName, n) : onRootChange}
+            templateMap={doc.templates}
+            templateColors={colors}
+            expandedInserts={expandedInserts}
+            onToggleInsert={onToggleInsert}
+            onTemplateNodesChange={onTemplateNodesChange}
+            onAddTemplate={onCreateTemplate}
+            onRenameTemplate={onRenameTemplate}
+            onSetTemplateColor={onSetColor}
+            collapsed={collapsed}
+            onCollapsedChange={onCollapsedChange}
+            onNotice={onNotice}
+          />
+        </div>
+      ) : (
+        <div className="editor-body">
+          {(() => {
+            const props = {
+              doc,
+              section,
+              colors,
+              uses,
+              blockSizes,
+              onRootChange,
+              onTemplateNodesChange,
+              onCreateTemplate,
+              onOpenBlock: (name: string) => onSelectSection({ kind: "template", name }),
+              onNotice,
+            };
+            const key = `${docKey}:${templateName ?? "@root"}`;
+            return view === "columns" ? <ColumnsView key={key} {...props} /> : <BlocksView key={key} {...props} />;
+          })()}
+        </div>
       )}
     </section>
   );

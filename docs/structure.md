@@ -77,6 +77,9 @@ name and path validated (`lib/validate.ts`).
 /
 ├── AGENTS.md                  ← instructions for AI agents (read structure doc first)
 ├── README.md                  ← user-facing readme
+├── CHANGELOG.md               ← release notes, newest first (started by bump-version.ps1)
+├── bump-version.ps1           ← sets the version in web/package.json, the lock file and
+│                                the README; starts the CHANGELOG section; -Commit commits
 ├── build.bat                  ← one-shot Electron build: verify → vite build →
 │                                electron-builder --dir → Inno Setup installer (.iss)
 ├── vercel.json                ← static hosting config (builds web/, serves web/dist)
@@ -228,6 +231,19 @@ All return new trees; never mutate.
 - `makeFolder` (marked `forceFolder` so a later dotted rename stays a
   folder), `makeFile`, `makeInsert`.
 - `renameTemplateInTree`, `removeTemplateRefs`, `countTemplateUses`.
+- `renamedNode(node, text)` — THE rename rule, shared by every view (rejects
+  bad names; never turns a folder into a file). `moveSibling`, `insertAfter`.
+
+### `web/src/lib/kit.ts` — "start from a kit" and starter blocks
+
+- `buildKit(options)` / `buildKitDocument(options)` — turns the New dialog's
+  answers (`KitOptions`: sort levels and their names, project folders, extra
+  top folders, numbering, optional top folder) into a complete `.fh`
+  document. The first sort level is written at the root; each deeper level
+  becomes a block (`YEARS`, `CLIENTS`, …) so it is defined once; project
+  folders become the `PROJECT` block.
+- `starterBlocks()` — the ready-made blocks offered in the sidebar;
+  `uniqueTemplateName` avoids name clashes when one is added.
 
 ### `web/src/lib/export.ts` — files in and out
 
@@ -251,8 +267,12 @@ All return new trees; never mutate.
 | File | Role |
 | --- | --- |
 | `Sidebar.tsx` | Left pane. Root plus the template list: color dot, name, `N×` use count (or "unused"), filter (7+ templates), new-template input. Template rows are drag sources (`TEMPLATE_MIME`). |
-| `EditorPane.tsx` | Centre pane. Header (section title; for a template: color, rename, delete) + Tree/Source toggle. Tree mode renders `Designer` for the selected section; Source mode renders `CodePane` for the whole file plus the issue list. Owns collapsed-folder and expanded-insert state so it survives switching sections. |
-| `Designer.tsx` | The tree editor (shared by Root, templates and inline-expanded inserts). Row = chevron, drag grip, icon, name, child count, actions. Actions show on hover/selection only. Selection + keyboard (arrows, Enter/F2, Del, Alt+↑/↓). Drag & drop to move; accepts sidebar templates. Inline rename validates names and never turns a folder into a file. `PlusDropdown` adds a folder, file, or template insert. |
+| `BlocksView.tsx` | Blocks view: the current folder as a board of cards (one per folder, listing its contents); blocks are colored bricks; cards accept blocks dragged from the sidebar; click a folder name to go into it. Starts inside the top folder when there is only one. |
+| `ColumnsView.tsx` | Columns view: one column per level. Selecting a folder opens its children in the next column; selecting a block opens the block's own contents (edits there change the block everywhere). Each column knows which tree it edits (root or a block). Exports the `ViewProps` shared with `BlocksView`. |
+| `NewDialog.tsx` | The New dialog ("start from a kit"): three steps with a live preview; produces `.fh` text via `lib/kit.ts`. Also offers Blank and the bundled examples. |
+| `NameInput.tsx` | Inline rename field used by the Blocks and Columns views. |
+| `EditorPane.tsx` | Centre pane. Three views chosen by a segmented control (`Columns`, `List`, `Blocks`; remembered in localStorage) plus a Source toggle. Header (section title; for a template: color, rename, delete) + Tree/Source toggle. Expand all / Collapse all act on the section being edited. Tree mode renders `Designer` for the selected section; Source mode renders `CodePane` for the whole file plus the issue list. Owns collapsed-folder and expanded-insert state so it survives switching sections. |
+| `Designer.tsx` | The List view: the tree editor (shared by Root, templates and inline-expanded inserts). Row = chevron, drag grip, icon, name, child count, actions. Actions show on hover/selection only. Selection + keyboard (arrows, Enter/F2, Del, Alt+↑/↓). Drag & drop to move; accepts sidebar templates. Inline rename validates names and never turns a folder into a file. `PlusDropdown` adds a folder, file, or template insert. |
 | `CodePane.tsx` | Contenteditable source editor with syntax highlighting, line numbers, Tab / Shift+Tab indent, auto-indent on Enter. |
 | `OutputPane.tsx` | Right pane. Stats, pre-flight checks (`CheckLine`), `Preview`, and the actions. Where the browser can't write folders, the zip is the primary action. |
 | `Preview.tsx` | Read-only planned tree. Collapsible, optional A–Z sort, a dot marks nodes that came from a template (in that template's color). |
@@ -327,10 +347,15 @@ via `/DAppSourceDir`. Requires Node.js and Inno Setup 6
 
 ## Conventions worth preserving
 
+- The version is kept in `web/package.json` only; change it with
+  `bump-version.ps1`, never by hand.
 - The source text changes only through `applySource` / `commitDoc`
   (`hooks/useFhDocument.ts`).
 - Designer edits produce new trees via `lib/treeEdit.ts` — no in-place mutation.
 - Use `isFileNode(node)` for file-vs-folder; never test the name directly.
+- In the UI a `@template` is called a **block**; the file format and the code
+  keep the word "template". Every view must apply renames through
+  `renamedNode`.
 - Carry comments whenever a document or node is copied or rebuilt.
 - Ids are never serialized; `lib/ids.ts` keeps them stable across re-parses.
 - Write, zip and preview the planned tree (`planTree`), never the raw
