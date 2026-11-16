@@ -1,0 +1,41 @@
+@version 1.0
+@name Home Paperwork
+
+# Household records. The YEARS block is used in two places, so adding a
+# year to it adds that year to both Taxes and Receipts.
+@root #79c0ff
+Household
+	01_Taxes
+		@insert YEARS
+	02_Home
+		Mortgage-or-Lease
+		Insurance
+		Repairs
+		Utilities
+		Manuals-and-Warranties
+	03_Vehicles
+		{Vehicle}
+			Title-and-Registration
+			Insurance
+			Service
+	04_Medical
+		{Person}
+			Records
+			Insurance
+			Bills
+	05_Money
+		Banking
+		Retirement
+		Investments
+	06_Family
+		IDs-and-Certificates
+		School
+		Pets
+	07_Receipts
+		@insert YEARS
+
+# One folder per year
+@template YEARS #7ee787
+	2025
+	2026
+	2027

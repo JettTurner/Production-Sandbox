@@ -1,0 +1,36 @@
+@version 1.0
+@name Video Channel
+
+# One folder per video, named with today's date and the title.
+# Numbered folders keep the steps in the order you work through them.
+@root #79c0ff
+Channel
+	01_Videos
+		{yymmdd}_{Title}
+			@insert VIDEO
+	02_Brand
+		Logos
+		Intro-Outro
+		Fonts
+		Thumbnail-Templates
+	03_Library
+		Music
+		Sound-Effects
+		B-Roll
+		Graphics
+	04_Ideas
+	05_Analytics
+
+# What every video gets
+@template VIDEO #f97583
+	01_Script
+	02_Footage
+		A-Cam
+		B-Cam
+		Screen
+	03_Audio
+	04_Project
+	05_Graphics
+	06_Export
+		Final
+		Thumbnail

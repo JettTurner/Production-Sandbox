@@ -1,0 +1,39 @@
+@version 1.0
+@name Code Project
+
+# A name with a dot in it is a file; everything else is a folder.
+# Files are created empty, ready to be filled in.
+@root #79c0ff
+{Project}
+	README.md
+	LICENSE.txt
+	.gitignore
+	package.json
+	src
+		index.ts
+		components
+			Button
+				@insert COMPONENT
+			Card
+				@insert COMPONENT
+			Modal
+				@insert COMPONENT
+		lib
+			utils.ts
+		assets
+	tests
+		setup.ts
+	docs
+		getting-started.md
+		changelog.md
+	scripts
+		build.mjs
+	.github
+		workflows
+			ci.yml
+
+# The files every component gets
+@template COMPONENT #ffa657
+	index.tsx
+	styles.css
+	index.test.tsx

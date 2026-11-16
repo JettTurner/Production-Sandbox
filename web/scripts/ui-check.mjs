@@ -8,6 +8,8 @@
  * File pickers cannot be automated, so an in-memory folder stands in for the
  * real one (see FAKE_FS). Everything else is the real app.
  */
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { preview } from "vite";
 import { chromium } from "playwright-core";
 
@@ -75,6 +77,13 @@ const sample = async (page, label) => {
   await page.click(`.more-item:has-text("${label}")`);
   await page.waitForTimeout(500);
 };
+// The big real-world structures the checks lean on are test fixtures, not
+// bundled examples; they are opened the way a user opens a file.
+const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
+const fixture = async (page, file) => {
+  await page.setInputFiles('input[type="file"][accept*=".fh"]', join(fixturesDir, file));
+  await page.waitForTimeout(500);
+};
 const view = async (page, name) => {
   await page.click(`.segmented button:has-text("${name}")`);
   await page.waitForTimeout(200);
@@ -104,8 +113,8 @@ try {
   const page = await open();
 
   // ---- loading and the three views ----
-  await sample(page, "VizLab");
-  check((await page.innerText(".stats div:nth-child(1) dd")) === "974", "VizLab sample resolves to 974 folders");
+  await fixture(page, "vizlab.fh");
+  check((await page.innerText(".stats div:nth-child(1) dd")) === "974", "the VizLab fixture resolves to 974 folders");
   check((await page.innerText(".statusbar .status")).includes("No problems"), "no problems reported");
   await view(page, "Blocks");
   check((await page.locator(".board > .card:not(.add-card)").count()) === 8, "Blocks: starts inside the single top folder (8 cards)");
@@ -182,13 +191,34 @@ try {
   check((await page.innerText(".segmented button.active")).trim() === "Blocks", "reload remembers the view");
 
   // ---- tidy-up ----
-  await sample(page, "Office Directory");
+  await fixture(page, "office-directory.fh");
   check((await page.innerText(".side-hint.tidy")).includes("3 blocks"), "unused blocks are pointed out");
   await page.click(".side-hint.tidy .link-btn");
   await page.waitForTimeout(300);
   check((await page.innerText(".sidebar")).toUpperCase().includes("BLOCKS · 3"), "unused blocks can be removed in one click");
 
-  // ---- New: start from a kit; fill-in names; create with a dry run ----
+  // ---- examples: from the menu, and from the New dialog with a preview ----
+  await sample(page, "Book series");
+  check((await page.inputValue(".doc-name")) === "Book Series" && (await page.innerText(".statusbar .status")).includes("No problems"), "an example opens from the menu with no problems");
+  await page.click('.toolbar button:has-text("New")');
+  check((await page.locator(".kit-cards.examples .kit-card").count()) === 7, "New lists the examples as cards");
+  await page.click('.kit-card:has-text("Photo shoots")');
+  await page.waitForTimeout(400);
+  const shown = await page.innerText(".wizard-count");
+  check((await page.innerText(".wizard-tree")).includes("{yymmdd}_{Client}_{Shoot}") && (await page.innerText(".dialog-foot .btn.primary")).trim() === "Open this example", "picking an example previews it before anything is replaced");
+  await page.click(".dialog-foot .btn.primary");
+  await page.waitForTimeout(500);
+  check((await page.inputValue(".doc-name")) === "Photo Shoots" && `${await page.innerText(".stats div:nth-child(1) dd")} folders` === shown, `the example opens as previewed (${shown})`);
+
+  // ---- starter blocks ----
+  check((await page.locator(".starter").count()) === 5, "the sidebar shows the first starter blocks");
+  await page.click('.side-hint .link-btn:has-text("Show all")');
+  check((await page.locator(".starter").count()) >= 10, "Show all lists every starter block");
+  await page.click('.starter:has-text("Months") .btn');
+  await page.waitForTimeout(300);
+  check((await page.locator('.side-item:has-text("MONTHS")').count()) === 1, "a starter block is added as a block");
+
+  // ---- New: guided setup; fill-in names; create with a dry run ----
   await page.click('.toolbar button:has-text("New")');
   await page.click(".dialog-foot .btn.primary");
   await page.click('.chip:has-text("By client")');
@@ -239,7 +269,7 @@ try {
   // ---- several things at once ----
   {
     const multi = await open();
-    await sample(multi, "VizLab");
+    await fixture(multi, "vizlab.fh");
     const row = (n) => `.editor .tree-row:has(.name:text-is("${n}"))`;
     const undo = async () => { await multi.keyboard.press("Control+z"); await multi.waitForTimeout(200); };
     await view(multi, "List");

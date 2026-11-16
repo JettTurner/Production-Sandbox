@@ -4,12 +4,14 @@ import type { KitOptions, SortKind } from "../lib/kit";
 import { parseFh } from "../lib/parser";
 import { countNodes, resolveDoc } from "../lib/resolver";
 import { planTree } from "../lib/validate";
+import { fetchSample } from "../lib/samples";
+import type { SampleInfo } from "../lib/samples";
 import type { FsNode } from "../lib/types";
 import { isFileNode } from "../lib/types";
 import { CheckIcon, FileIcon, FolderIcon, PlusIcon, XIcon } from "./icons";
 
 interface NewDialogProps {
-  samples: { value: string; label: string }[];
+  samples: SampleInfo[];
   /** Load generated (or blank) .fh text as a new, unsaved structure. */
   onCreate: (text: string) => void;
   onLoadSample: (value: string) => void;
@@ -70,13 +72,19 @@ function ChipList({ values, onChange, addLabel, mono }: { values: string[]; onCh
 }
 
 /**
- * The New dialog: start from a kit. Three steps — pick a starting point,
- * answer a few plain questions, name it — with a live preview of the result.
- * The answers are turned into a normal .fh document by lib/kit.ts.
+ * The New dialog. Step 1 is a gallery: guided setup, blank, copy a folder,
+ * or one of the bundled examples. Whatever is picked shows in the preview on
+ * the right straight away. An example opens in one click; guided setup goes
+ * on to a few plain questions and a name, and lib/kit.ts turns the answers
+ * into a normal .fh document.
  */
 export default function NewDialog({ samples, onCreate, onLoadSample, onImportFolder, onClose }: NewDialogProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [kit, setKit] = useState<"projects" | "blank">("projects");
+  // "kit" (guided setup), "blank", or the value of an example.
+  const [choice, setChoice] = useState<string>("kit");
+  const [sampleText, setSampleText] = useState<Record<string, string | null>>({});
+  const sample = samples.find((x) => x.value === choice);
+  const kit: "projects" | "blank" = choice === "blank" ? "blank" : "projects";
   const [o, setO] = useState<KitOptions>(() => defaultKitOptions());
   const closeRef = useRef<HTMLButtonElement>(null);
   const set = (patch: Partial<KitOptions>) => setO((prev) => ({ ...prev, ...patch }));
@@ -88,13 +96,28 @@ export default function NewDialog({ samples, onCreate, onLoadSample, onImportFol
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const text = useMemo(() => (kit === "blank" ? BLANK(o.name) : buildKit(o)), [kit, o]);
+  // Fetch an example the first time it is picked (null = could not be loaded).
+  useEffect(() => {
+    if (!sample || sampleText[sample.value] !== undefined) return;
+    let cancelled = false;
+    fetchSample(sample.value)
+      .then((t) => !cancelled && setSampleText((prev) => ({ ...prev, [sample.value]: t })))
+      .catch(() => !cancelled && setSampleText((prev) => ({ ...prev, [sample.value]: null })));
+    return () => {
+      cancelled = true;
+    };
+  }, [sample, sampleText]);
+
+  const text = useMemo(
+    () => (sample ? (sampleText[sample.value] ?? "") : kit === "blank" ? BLANK(o.name) : buildKit(o)),
+    [sample, sampleText, kit, o],
+  );
   const preview = useMemo(() => {
     const doc = parseFh(text).doc;
     if (!doc) return null;
     const plan = planTree(resolveDoc(doc).tree);
     const colors: Record<string, string> = {};
-    doc.templateOrder.forEach((t, i) => (colors[t] = BLOCK_COLORS[i % BLOCK_COLORS.length]));
+    doc.templateOrder.forEach((t, i) => (colors[t] = doc.templateColors[t] ?? BLOCK_COLORS[i % BLOCK_COLORS.length]));
     const rows: { node: FsNode; depth: number }[] = [];
     const walk = (nodes: FsNode[], depth: number) => {
       for (const n of nodes) {
@@ -103,7 +126,7 @@ export default function NewDialog({ samples, onCreate, onLoadSample, onImportFol
       }
     };
     walk(plan.tree, 0);
-    return { rows, colors, stats: countNodes(plan.tree), problems: plan.issues.filter((i) => i.severity === "error") };
+    return { rows, colors, blocks: doc.templateOrder.length, stats: countNodes(plan.tree), problems: plan.issues.filter((i) => i.severity === "error") };
   }, [text]);
 
   const toggleSort = (kind: SortKind) =>
@@ -113,10 +136,11 @@ export default function NewDialog({ samples, onCreate, onLoadSample, onImportFol
   const extraChoices = [...DEFAULT_EXTRAS, ...o.extras.filter((f) => !DEFAULT_EXTRAS.includes(f))];
 
   const steps: { n: 1 | 2 | 3; title: string; sub: string }[] = [
-    { n: 1, title: "Pick a starting point", sub: step > 1 ? (kit === "blank" ? "Blank" : "Projects kit") : "" },
-    { n: 2, title: "Choose what goes inside", sub: kit === "blank" ? "Skipped" : "A few questions" },
-    { n: 3, title: "Name it and create", sub: "" },
+    { n: 1, title: "Pick a starting point", sub: sample ? sample.label : step > 1 ? (kit === "blank" ? "Blank" : "Guided setup") : "" },
+    { n: 2, title: "Choose what goes inside", sub: sample ? "Already done" : kit === "blank" ? "Skipped" : "A few questions" },
+    { n: 3, title: "Name it and create", sub: sample ? "Already done" : "" },
   ];
+  const pick = (value: string) => () => setChoice(value);
   const next = () => setStep(step === 1 ? (kit === "blank" ? 3 : 2) : 3);
   const back = () => setStep(step === 3 ? (kit === "blank" ? 1 : 2) : 1);
 
@@ -126,7 +150,7 @@ export default function NewDialog({ samples, onCreate, onLoadSample, onImportFol
         <div className="dialog-head">
           <div>
             <h2 id="new-title">New structure</h2>
-            <span>Answer a few questions, or start blank. Everything can be changed afterwards.</span>
+            <span>Pick a starting point and see what you get. Everything can be changed afterwards.</span>
           </div>
           <button ref={closeRef} type="button" className="icon-btn big" aria-label="Close" onClick={onClose}>
             <XIcon />
@@ -150,34 +174,40 @@ export default function NewDialog({ samples, onCreate, onLoadSample, onImportFol
             {step === 1 && (
               <>
                 <section className="question">
-                  <h3>How do you want to start?</h3>
+                  <h3>Build your own</h3>
                   <div className="kit-cards">
-                    <button type="button" className={`kit-card ${kit === "projects" ? "active" : ""}`} aria-pressed={kit === "projects"} onClick={() => setKit("projects")}>
-                      <b>Projects kit</b>
-                      <small>Sort work by department, year or client. Every project gets the same folders.</small>
+                    <button type="button" className={`kit-card ${choice === "kit" ? "active" : ""}`} aria-pressed={choice === "kit"} onClick={pick("kit")} onDoubleClick={next}>
+                      <b>Guided setup</b>
+                      <small>Answer a few questions: sort work by department, year or client, and give every project the same folders.</small>
                     </button>
-                    <button type="button" className={`kit-card ${kit === "blank" ? "active" : ""}`} aria-pressed={kit === "blank"} onClick={() => setKit("blank")}>
+                    <button type="button" className={`kit-card ${choice === "blank" ? "active" : ""}`} aria-pressed={choice === "blank"} onClick={pick("blank")} onDoubleClick={next}>
                       <b>Blank</b>
                       <small>An empty structure. Add folders and blocks yourself.</small>
                     </button>
+                    {onImportFolder && (
+                      <button type="button" className="kit-card" onClick={onImportFolder}>
+                        <b>Copy a folder…</b>
+                        <small>Already have folders you like? Choose one on this computer and its layout is copied in.</small>
+                      </button>
+                    )}
                   </div>
                 </section>
-                {onImportFolder && (
-                  <section className="question">
-                    <h3>Already have folders you like?</h3>
-                    <div className="chips">
-                      <button type="button" className="chip" onClick={onImportFolder}>
-                        Copy the layout of a folder on this computer…
-                      </button>
-                    </div>
-                  </section>
-                )}
                 <section className="question">
-                  <h3>Or open an example</h3>
-                  <div className="chips">
-                    {samples.map((s) => (
-                      <button type="button" className="chip" key={s.value} onClick={() => onLoadSample(s.value)}>
-                        {s.label}
+                  <h3>Or start from an example</h3>
+                  <p>Click one to look inside it. Double-click to open it.</p>
+                  <div className="kit-cards examples">
+                    {samples.map((x) => (
+                      <button
+                        type="button"
+                        className={`kit-card ${choice === x.value ? "active" : ""}`}
+                        aria-pressed={choice === x.value}
+                        key={x.value}
+                        onClick={pick(x.value)}
+                        onDoubleClick={() => onLoadSample(x.value)}
+                      >
+                        <b>{x.label}</b>
+                        <small>{x.blurb}</small>
+                        <span className="kit-tag">{x.shows}</span>
                       </button>
                     ))}
                   </div>
@@ -268,12 +298,23 @@ export default function NewDialog({ samples, onCreate, onLoadSample, onImportFol
 
           <aside className="wizard-preview" aria-label="Preview">
             <div className="section-label">What you get</div>
-            {preview && preview.rows.length > 0 ? (
+            {sample && <p className="wizard-picked">{sample.label}</p>}
+            {sample && sampleText[sample.value] === null ? (
+              <p className="wizard-problem">This example could not be loaded.</p>
+            ) : sample && sampleText[sample.value] === undefined ? (
+              <p className="side-hint">Loading…</p>
+            ) : preview && preview.rows.length > 0 ? (
               <>
                 <p className="wizard-count">
                   {preview.stats.folders.toLocaleString()} {preview.stats.folders === 1 ? "folder" : "folders"}
                   {preview.stats.files ? `, ${preview.stats.files} files` : ""}
                 </p>
+                {preview.blocks > 0 && (
+                  <p className="wizard-note">
+                    Built from {preview.blocks} {preview.blocks === 1 ? "block" : "blocks"}. A colored dot marks what came from one.
+                  </p>
+                )}
+                {sample && <p className="wizard-note">Shows: {sample.shows.toLowerCase()}.</p>}
                 <div className="wizard-tree">
                   {preview.rows.slice(0, PREVIEW_ROWS).map(({ node, depth }) => (
                     <div className="wizard-row" key={node.id} style={{ paddingLeft: depth * 14 }}>
@@ -293,13 +334,17 @@ export default function NewDialog({ samples, onCreate, onLoadSample, onImportFol
         </div>
 
         <div className="dialog-foot">
-          <span className="dialog-status">Step {step} of 3</span>
+          <span className="dialog-status">{sample ? "Ready to open" : `Step ${step} of 3`}</span>
           {step > 1 && (
             <button type="button" className="btn big" onClick={back}>
               Back
             </button>
           )}
-          {step < 3 ? (
+          {sample ? (
+            <button type="button" className="btn primary big" disabled={!sampleText[sample.value]} onClick={() => onLoadSample(sample.value)}>
+              Open this example
+            </button>
+          ) : step < 3 ? (
             <button type="button" className="btn primary big" onClick={next}>
               Next
             </button>

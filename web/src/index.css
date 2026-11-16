@@ -2295,7 +2295,7 @@ fieldset.field .field-label {
 }
 .kit-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 10px;
 }
 .kit-card {
@@ -2323,6 +2323,23 @@ fieldset.field .field-label {
 .kit-card.active {
   border-color: var(--sel-border);
   background: var(--sel-bg);
+}
+.kit-cards.examples {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+.kit-card .kit-tag {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 3px 9px;
+  border-radius: 10px;
+  background: var(--chip);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+.kit-card.active .kit-tag {
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 .chips {
   display: flex;
@@ -2442,9 +2459,18 @@ button.chip:hover {
   border-left: 1px solid var(--border);
   overflow-y: auto;
 }
+.wizard-picked {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-soft);
+}
 .wizard-count {
   font-size: 18px;
   font-weight: 600;
+}
+.wizard-note {
+  font-size: 12px;
+  color: var(--muted);
 }
 .wizard-tree {
   display: flex;

@@ -105,14 +105,20 @@ name and path validated (`lib/validate.ts`).
     │   ├── Production-Sandbox_Icon.svg ← source of truth for all app icons
     │   ├── Production-Sandbox_Icon.ai/.png ← raw design assets
     │   ├── icon.png           ← GENERATED 256px PNG
-    │   └── samples/           ← bundled example .fh files (⋯ menu → Samples)
-    │       ├── startup.fh     ← loaded automatically on app boot
-    │       ├── vizlab.fh
-    │       ├── example.fh
-    │       ├── project-structure.fh
-    │       └── office-directory.fh
+    │   └── samples/           ← the bundled examples (New dialog and ⋯ menu → Examples);
+    │       │                     listed, with their descriptions, in src/lib/samples.ts
+    │       ├── startup.fh     ← loaded on a brand-new profile; not listed as an example
+    │       ├── photo-shoots.fh    ← fill-in names
+    │       ├── client-work.fh     ← a block inside a block
+    │       ├── book-series.fh     ← one block used many times
+    │       ├── home-paperwork.fh  ← one block in two places
+    │       ├── video-channel.fh   ← dates in names
+    │       ├── code-project.fh    ← files as well as folders
+    │       └── studio.fh          ← a large structure from small blocks
     ├── scripts/
     │   ├── verify.ts          ← headless regression suite (npm run verify)
+    │   ├── fixtures/          ← big real-world .fh files (vizlab, office-directory) used
+    │   │                         only by verify.ts and ui-check.mjs; not shipped in the app
     │   ├── ui-check.mjs       ← the built app driven in a browser (npm run test:ui)
     │   └── make-icon.mjs      ← icon SVG → build/icon.ico + public/icon.png (npm run icons)
     └── src/
@@ -249,8 +255,21 @@ All return new trees; never mutate.
   document. The first sort level is written at the root; each deeper level
   becomes a block (`YEARS`, `CLIENTS`, …) so it is defined once; project
   folders become the `PROJECT` block.
-- `starterBlocks()` — the ready-made blocks offered in the sidebar;
+- `starterBlocks()` — the ready-made blocks offered in the sidebar, most
+  generally useful first (the sidebar shows the first five, then "Show all");
+  `describeStarter` lists a block's contents for its tooltip;
   `uniqueTemplateName` avoids name clashes when one is added.
+
+### `web/src/lib/samples.ts` — the bundled examples
+
+- `SAMPLES` — the list shown in the New dialog and the menu: file name, label,
+  a one-line description and the feature the example shows. Adding an example
+  means adding the `.fh` file to `public/samples/` and an entry here.
+- `STARTUP_SAMPLE` — what a brand-new profile opens on.
+- `fetchSample(value)` — the example's text, fetched once and remembered.
+- Rules for an example (checked by `verify.ts`): no errors or warnings, no
+  merged duplicates, every block used and colored, and a comment above `@root`
+  that says what it is.
 
 ### `web/src/lib/blanks.ts` — fill-in names
 
@@ -308,7 +327,7 @@ All return new trees; never mutate.
 | `Crumbs.tsx` | The path at the top of the editor. In Columns and Blocks it is the path inside the section; after going into a block it starts with the way back (`origins` / `onBackTo` in `ViewProps`, kept in `App`). |
 | `WhatsNewDialog.tsx` | Shows `CHANGELOG.md` (imported raw at build time) and the app version. |
 | `ColumnsView.tsx` | Columns view: one column per level. Selecting a folder opens its children in the next column; selecting a block opens the block's own contents (edits there change the block everywhere). Each column knows which tree it edits (root or a block). Exports the `ViewProps` shared with `BlocksView`. |
-| `NewDialog.tsx` | The New dialog ("start from a kit"): three steps with a live preview; produces `.fh` text via `lib/kit.ts`. Also offers Blank and the bundled examples. |
+| `NewDialog.tsx` | The New dialog. Step 1 is a gallery of cards: Guided setup, Blank, Copy a folder, and the bundled examples (`lib/samples.ts`). Whatever is picked shows in the live preview; an example opens in one click (or a double-click on its card). Guided setup continues to two more steps and produces `.fh` text via `lib/kit.ts`. |
 | *(all three views)* | Share drag types `TEMPLATE_MIME` (a block from the sidebar) and `NODE_MIME` (something being moved), the `reveal` prop (Find asks a view to show a node), and the rename / move helpers in `lib/treeEdit.ts`. |
 | `NameInput.tsx` | Inline rename field used by the Blocks and Columns views. |
 | `EditorPane.tsx` | Centre pane. A Find box (Ctrl+F) searches names in the section and reveals the pick in the current view. Three views chosen by a segmented control (`Columns`, `List`, `Blocks`; remembered in localStorage) plus a Source toggle. Header (section title; for a template: color, rename, delete) + Tree/Source toggle. Expand all / Collapse all act on the section being edited. Tree mode renders `Designer` for the selected section; Source mode renders `CodePane` for the whole file plus the issue list. Owns collapsed-folder and expanded-insert state so it survives switching sections. |
@@ -346,8 +365,11 @@ All return new trees; never mutate.
 `web/scripts/verify.ts`, run by `npm run verify` (tsx, no test framework).
 Covers:
 
-- every bundled sample: parses, resolves, round-trips, keeps its comments,
-  serializes idempotently;
+- every bundled example and test fixture: parses, resolves, round-trips,
+  keeps its comments, serializes idempotently;
+- the example list: `lib/samples.ts` matches the files, and every example is
+  clean (see the rules under `lib/samples.ts`);
+- starter blocks: unique names, clean trees;
 - parsing (indentation, labels, colors, legacy directives), resolution
   (in-place splice, circular / missing templates);
 - comments surviving designer edits; the folder marker; validation (illegal
@@ -363,7 +385,8 @@ Prints `ALL CHECKS PASSED` on success.
 run `npm run build` first. It serves `dist/`, opens it in an installed Chrome
 or Edge through `playwright-core` (`FH_BROWSER=chrome|msedge`), and checks
 the three views, drag and keyboard editing, Find, the New and Create dialogs,
-fill-in names, the path back and the phone layout.
+the examples, starter blocks, fill-in names, the path back and the phone
+layout. The big structures it edits are opened from `scripts/fixtures/`.
 
 ## Commands (run inside `web/`)
 

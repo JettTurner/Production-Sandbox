@@ -11,7 +11,8 @@ import { removeNode, insertChild, updateNode, moveNode, insertRelative, makeInse
 import { makeFolder } from "../src/lib/treeEdit";
 import { reconcileIds, cloneWithNewIds } from "../src/lib/ids";
 import { planTree, nameProblem } from "../src/lib/validate";
-import { buildKit, buildKitDocument, cleanNames, defaultKitOptions, starterBlocks, uniqueTemplateName } from "../src/lib/kit";
+import { buildKit, buildKitDocument, cleanNames, defaultKitOptions, describeStarter, starterBlocks, uniqueTemplateName } from "../src/lib/kit";
+import { SAMPLES, STARTUP_SAMPLE } from "../src/lib/samples";
 import { renamedNode, moveSibling, moveToParent, findByName } from "../src/lib/treeEdit";
 import { scanDestination, createOnDisk, readFolder } from "../src/lib/folders";
 import { dateBlanks, fillBlanks, findBlanks, usesDateBlanks } from "../src/lib/blanks";
@@ -30,11 +31,31 @@ function check(cond: boolean, label: string) {
   }
 }
 
+// Bundled examples (public/samples) and the big real-world files kept only
+// for testing (scripts/fixtures). Both get the full round-trip treatment.
 const samplesDir = join(process.cwd(), "public", "samples");
-const files = readdirSync(samplesDir).filter((f) => f.endsWith(".fh"));
+const fixturesDir = join(process.cwd(), "scripts", "fixtures");
+const sampleFiles = readdirSync(samplesDir).filter((f) => f.endsWith(".fh"));
+const files = [...sampleFiles.map((f) => join(samplesDir, f)), ...readdirSync(fixturesDir).filter((f) => f.endsWith(".fh")).map((f) => join(fixturesDir, f))];
 
-for (const file of files) {
-  const source = readFileSync(join(samplesDir, file), "utf-8");
+{
+  console.log("\n== the example list ==");
+  const listed = [...SAMPLES.map((s) => s.value), STARTUP_SAMPLE].sort();
+  check(JSON.stringify(listed) === JSON.stringify(sampleFiles.map((f) => f.replace(/\.fh$/, "")).sort()), "every example file is listed in lib/samples.ts, and nothing else is");
+  check(SAMPLES.every((s) => s.label && s.blurb && s.shows), "every example has a label, a description and what it shows");
+  for (const s of [...SAMPLES.map((x) => x.value), STARTUP_SAMPLE]) {
+    const { doc, issues } = parseFh(readFileSync(join(samplesDir, `${s}.fh`), "utf-8"));
+    const plan = doc ? planTree(resolveDoc(doc).tree) : null;
+    const unused = doc ? doc.templateOrder.filter((t) => !countTemplateUses([doc.root, ...Object.values(doc.templates)])[t]) : [];
+    check(!!doc && issues.length === 0 && !!plan && plan.issues.length === 0 && plan.duplicates === 0, `${s}: no errors, warnings or merged duplicates`);
+    check(unused.length === 0 && !!doc && doc.templateOrder.every((t) => doc.templateColors[t]), `${s}: every block is used and has a color`);
+    check(!!doc && doc.rootComments.length > 0, `${s}: starts with a comment that explains it`);
+  }
+}
+
+for (const path of files) {
+  const file = path.slice(path.lastIndexOf("/") + 1);
+  const source = readFileSync(path, "utf-8");
   console.log(`\n== ${file} (${source.split("\n").length} lines) ==`);
   const { doc, issues } = parseFh(source);
   check(!!doc, "parsed");
@@ -339,7 +360,10 @@ console.log(`\n== behavior checks ==`);
   check(cleanNames([" A ", "a", "", "#x", "B/"]).join(",") === "A,B", "kit names are trimmed, de-duplicated and filtered");
   // starter blocks
   const starters = starterBlocks(2026);
-  check(starters.length === 4 && starters.every((s) => s.build().length > 0), "starter blocks build");
+  check(starters.length >= 10 && starters.every((s) => s.build().length > 0), "starter blocks build");
+  check(new Set(starters.map((s) => s.name)).size === starters.length && starters.every((s) => /^[A-Z][A-Z0-9_]*$/.test(s.name)), "starter block names are unique, plain block names");
+  check(starters.every((s) => planTree(s.build()).issues.length === 0), "every starter block is clean (no bad names, no duplicates)");
+  check(describeStarter(starters.find((s) => s.name === "CLIENT")!) === "00_Admin\n    Contract\n    Invoices\n    Notes\nProjects", "a starter block can be described for its tooltip");
   check(uniqueTemplateName("PROJECT", { PROJECT: 1, PROJECT_2: 1 }) === "PROJECT_3", "starter names avoid clashes");
   // shared rename rule + sibling move
   const f = makeFolder("Docs");

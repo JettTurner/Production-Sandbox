@@ -1,0 +1,31 @@
+@version 1.0
+@name Photo Shoots
+
+# One folder per shoot. Create folders asks for the client and the shoot,
+# and puts today's date in front so shoots stay in date order.
+@root #79c0ff
+Photography
+	01_Shoots
+		{year}
+			{yymmdd}_{Client}_{Shoot}
+				@insert SHOOT
+	02_Portfolio
+		Website
+		Prints
+		Social
+	03_Presets
+	04_Business
+		Contracts
+		Invoices
+		Receipts
+		Insurance
+
+# What every shoot gets
+@template SHOOT #ffa657
+	01_RAW
+	02_Selects
+	03_Edits
+	04_Delivered
+		Web
+		Print
+	05_Paperwork

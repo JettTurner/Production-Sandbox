@@ -1,0 +1,36 @@
+@version 1.0
+@name Client Work
+
+# One folder per client, and inside it one folder per project.
+# The CLIENT block uses the PROJECT block: a block inside a block.
+@root #79c0ff
+Clients
+	{Client}
+		@insert CLIENT
+Business
+	{year}
+		Invoices-Sent
+		Expenses
+		Taxes
+Templates
+	Proposals
+	Contracts
+	Invoices
+Archive
+
+# What every client gets
+@template CLIENT #bc8cff
+	00_Admin
+		Contract
+		Invoices
+		Notes
+	Projects
+		{yymmdd}_{Project}
+			@insert PROJECT
+
+# What every project gets
+@template PROJECT #ffa657
+	01_Brief
+	02_Working
+	03_Review
+	04_Final

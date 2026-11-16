@@ -1,14 +1,16 @@
 @version 1.0
-@name Startup
+@name My Projects
 
-#---Root---
-@root
-ProjectName
-	@insert PROJECT
+# A simple start: one folder per project, each with the same folders inside.
+# Create folders asks what the project is called.
+@root #79c0ff
+Projects
+	{Project}
+		@insert PROJECT
+Archive
 
-#---Templates---
-@template PROJECT
-	00_ProgressImages
-	01_Deliverables
-	02_Links
-	03_ReferenceFiles
+# What every project gets
+@template PROJECT #ffa657
+	01_Reference
+	02_Working
+	03_Final

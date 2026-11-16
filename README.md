@@ -50,7 +50,9 @@ A **block** is a reusable set of folders. In the `.fh` file a block is a `@templ
 
 ### New: start from a kit
 
-**New** asks a few plain questions (how you sort your work, which departments / years / clients, what every project gets) and builds the structure, with a live preview. You can also start blank or open an example.
+**New** opens a gallery of starting points, and whatever you pick is shown in a live preview before anything is replaced. **Guided setup** asks a few plain questions (how you sort your work, which departments / years / clients, what every project gets) and builds the structure. You can also start blank, copy the layout of a folder you already have, or open one of the examples: photo shoots, client work, a book series, home paperwork, a video channel, a code project and a whole creative studio. Each example is small and shows one feature.
+
+The sidebar also offers **starter blocks** (Project, Work stages, Dated folder, Years, Client, Months and more) that are added to the structure in one click.
 
 ### Features
 
@@ -72,7 +74,7 @@ A **block** is a reusable set of folders. In the `.fh` file a block is a `@templ
 | **Picks up where you left off** | The app reopens your last structure, and recent files are listed for reopening. |
 | **Path back** | Going into a block from anywhere shows the way back at the top of the editor. |
 | **Light / dark theme** | Under the `⋯` menu; remembered. The desktop title bar stays dark. |
-| **Samples, What's new** | Under the `⋯` menu. |
+| **Examples, What's new** | Under the `⋯` menu. Examples are also in New, with a preview. |
 
 ---
 
@@ -82,7 +84,7 @@ A `.fh` file defines a hierarchy with **tab indentation** (space indentation is 
 
 ```fh
 @version 1.0
-@name PBK VizLab Structure
+@name Studio Structure
 
 #---Root---
 @root
@@ -154,7 +156,8 @@ Sets the version in `web\package.json` (the one place it is kept), `web\package-
 
 ```
 web/
-├── public/samples/          # sample .fh files (bundled)
+├── public/samples/          # the bundled examples (listed in src/lib/samples.ts)
+├── scripts/fixtures/        # big real-world .fh files used only by the tests
 ├── scripts/verify.ts        # regression suite (npm run verify)
 ├── scripts/ui-check.mjs     # browser checks of the built app (npm run test:ui)
 ├── electron/main.cjs        # desktop shell

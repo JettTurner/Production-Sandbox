@@ -1,0 +1,51 @@
+@version 1.0
+@name Book Series
+
+# Every book gets the same folders: change the BOOK block once and all
+# three books change with it.
+@root #79c0ff
+{Series}
+	00_Series-Bible
+		Outline
+		Style-Guide
+		Research
+	01_Books
+		Book-1
+			@insert BOOK
+		Book-2
+			@insert BOOK
+		Book-3
+			@insert BOOK
+	02_Marketing
+		Website
+		Newsletter
+		Ads
+		Press-Kit
+	03_Business
+		ISBNs
+		Contracts
+		Royalties
+		Receipts
+
+# What every book gets
+@template BOOK #bc8cff
+	01_Manuscript
+		Drafts
+		Edits
+		Final
+	02_Cover
+		@insert ARTWORK
+	03_Interior
+		Print
+		Ebook
+	04_Audiobook
+	05_Launch
+		Blurb
+		Reviews
+		Graphics
+			@insert ARTWORK
+
+# Working files and finished files, kept apart
+@template ARTWORK #56d4dd
+	Source
+	Exports

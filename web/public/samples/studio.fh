@@ -1,0 +1,85 @@
+@version 1.0
+@name Creative Studio
+
+# A whole studio: three departments, each sorted by year, then client,
+# then project. Six small blocks build more than 250 folders.
+@root #79c0ff
+STUDIO
+	01_Design
+		@insert YEARS
+	02_Motion
+		@insert YEARS
+	03_Photo
+		@insert YEARS
+	04_Library
+		@insert LIBRARY
+	05_Tools
+		Software
+		Plugins
+		Scripts
+	06_Templates
+		Documents
+		Presentations
+		Project-Files
+	07_Admin
+		@insert ADMIN
+	08_Archive
+		Design
+		Motion
+		Photo
+
+# Every department is sorted by year...
+@template YEARS #7ee787
+	2026
+		@insert CLIENTS
+	2027
+		@insert CLIENTS
+
+# ...then by client, with room for the next project
+@template CLIENTS #bc8cff
+	Client-A
+		{Project}
+			@insert PROJECT
+	Client-B
+		{Project}
+			@insert PROJECT
+	Client-C
+		{Project}
+			@insert PROJECT
+
+# What every project gets
+@template PROJECT #ffa657
+	00_Brief
+	01_Reference
+	02_Working
+		@insert VERSIONS
+	03_Review
+	04_Deliverables
+		@insert VERSIONS
+	05_Correspondence
+
+@template VERSIONS #56d4dd
+	Current
+	Old
+
+# Shared assets, used by every department
+@template LIBRARY #f97583
+	Fonts
+	Logos
+	Photos
+		Stock
+		Our-Own
+	Textures
+	Models
+	Audio
+		Music
+		Sound-Effects
+	Color-Palettes
+
+@template ADMIN #79c0ff
+	Accounts
+	Licenses
+	Receipts
+	Contracts
+	Insurance
+	Tutorials

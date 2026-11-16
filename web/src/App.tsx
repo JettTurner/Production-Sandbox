@@ -40,11 +40,12 @@ import { hasAccess, isFirstRun, listRecent, loadSession, rememberFile, saveSessi
 import type { RecentFile } from "./lib/session";
 import { cleanTemplateName, countTemplateUses, removeTemplateRefs, renameTemplateInTree } from "./lib/treeEdit";
 import { planTree } from "./lib/validate";
+import { fetchSample, SAMPLES, STARTUP_SAMPLE } from "./lib/samples";
 import { emptyDocument, newId } from "./lib/types";
 import type { FsNode } from "./lib/types";
 
 // First-paint + offline fallback; the real startup content is fetched from
-// /samples/startup.fh in the effect below.
+// the startup sample (lib/samples.ts) in the effect below.
 const DEFAULT_SOURCE = `@version 1.0
 @name Untitled Structure
 
@@ -71,14 +72,6 @@ function storedView(): EditorView {
   }
   return "blocks";
 }
-
-const SAMPLES: { value: string; label: string }[] = [
-  { value: "startup", label: "Startup / Default" },
-  { value: "vizlab", label: "VizLab Production" },
-  { value: "office-directory", label: "Office Directory" },
-  { value: "project-structure", label: "PBK Project Structure" },
-  { value: "example", label: "Example / Recursion demo" },
-];
 
 const TEMPLATE_PALETTE = ["#bc8cff", "#f97583", "#79c0ff", "#56d4dd", "#d2a8ff", "#ffa657", "#7ee787", "#ff7b72"];
 
@@ -324,13 +317,11 @@ export default function App() {
     if (!confirmDiscard()) return;
     setNewOpen(false);
     try {
-      const res = await fetch(`${import.meta.env.BASE_URL}samples/${value}.fh`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      // Samples are starting points, not files to overwrite: no handle is kept.
-      openText(await res.text(), `${value}.fh`, null);
-      notify(`Loaded sample "${value}.fh".`);
+      // Examples are starting points, not files to overwrite: no handle is kept.
+      openText(await fetchSample(value), `${value}.fh`, null);
+      notify(`Opened the example “${SAMPLES.find((s) => s.value === value)?.label ?? value}”.`);
     } catch (err) {
-      notify(`Could not load sample: ${(err as Error).message}`, "error");
+      notify(`Could not open the example: ${(err as Error).message}`, "error");
     }
   };
 
@@ -396,13 +387,9 @@ export default function App() {
         cancelled = true;
       };
     }
-    fetch(`${import.meta.env.BASE_URL}samples/startup.fh`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.text();
-      })
+    fetchSample(STARTUP_SAMPLE)
       .then((text) => {
-        if (!cancelled && !dirtyRef.current) openText(text, "startup.fh", null);
+        if (!cancelled && !dirtyRef.current) openText(text, `${STARTUP_SAMPLE}.fh`, null);
       })
       .catch(() => {
         /* stay on the built-in default */
@@ -726,9 +713,9 @@ export default function App() {
                   </>
                 )}
                 <div className="more-sep" />
-                <div className="more-label">Samples</div>
+                <div className="more-label">Examples</div>
                 {SAMPLES.map((s) => (
-                  <button type="button" role="menuitem" className="more-item" key={s.value} onClick={() => loadSample(s.value)}>
+                  <button type="button" role="menuitem" className="more-item" key={s.value} title={s.blurb} onClick={() => loadSample(s.value)}>
                     {s.label}
                   </button>
                 ))}
