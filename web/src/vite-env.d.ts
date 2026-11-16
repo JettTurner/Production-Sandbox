@@ -36,7 +36,20 @@ interface FileSystemSaveFilePickerOptions extends FileSystemPickerOptions {
   }>;
 }
 
+interface FileSystemOpenFilePickerOptions extends FileSystemPickerOptions {
+  multiple?: boolean;
+  types?: Array<{
+    description: string;
+    accept: Record<string, string[]>;
+  }>;
+}
+
+interface DataTransferItem {
+  getAsFileSystemHandle?: () => Promise<FileSystemFileHandle | FileSystemDirectoryHandle | null>;
+}
+
 interface Window {
   showDirectoryPicker?: (options?: FileSystemPickerOptions) => Promise<FileSystemDirectoryHandle>;
+  showOpenFilePicker?: (options?: FileSystemOpenFilePickerOptions) => Promise<FileSystemFileHandle[]>;
   showSaveFilePicker?: (options?: FileSystemSaveFilePickerOptions) => Promise<FileSystemFileHandle>;
 }

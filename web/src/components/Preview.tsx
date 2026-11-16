@@ -1,38 +1,32 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { FsNode } from "../lib/types";
-import { computeMaxDepth, gradientColor } from "../lib/resolver";
-import { ChevronIcon, FileIcon, FolderIcon, FolderArrowIcon } from "./icons";
+import { isFileNode } from "../lib/types";
+import { ChevronIcon, FileIcon, FolderIcon } from "./icons";
 
 interface PreviewProps {
+  /** The planned tree: resolved, with same-name siblings merged. */
   tree: FsNode[];
-  errors: string[];
+  templateColors: Record<string, string>;
 }
 
-const INDENT = 20;
-
-type ColorMode = "depth" | "type";
-
-const TYPE_COLORS = {
-  folder: "#2f81f7",
-  file: "#7ee787",
-};
+const INDENT = 16;
+const DEFAULT_TEMPLATE_COLOR = "#f0b35a";
 
 function sortNodes(nodes: FsNode[]): FsNode[] {
   const sorted = [...nodes].sort((a, b) => {
-    const aFile = a.name.includes(".");
-    const bFile = b.name.includes(".");
+    const aFile = isFileNode(a);
+    const bFile = isFileNode(b);
     if (aFile !== bFile) return aFile ? 1 : -1;
-    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true });
   });
   return sorted.map((n) => ({ ...n, children: sortNodes(n.children) }));
 }
 
-export default function Preview({ tree, errors }: PreviewProps) {
+/** Read-only view of exactly what will be created. */
+export default function Preview({ tree, templateColors }: PreviewProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [colorMode, setColorMode] = useState<ColorMode>("depth");
-  const [sortAlpha, setSortAlpha] = useState(true);
-  const displayTree = sortAlpha ? sortNodes(tree) : tree;
-  const maxDepth = computeMaxDepth(displayTree);
+  const [sortAlpha, setSortAlpha] = useState(false);
+  const displayTree = useMemo(() => (sortAlpha ? sortNodes(tree) : tree), [tree, sortAlpha]);
 
   const toggle = (id: string) =>
     setCollapsed((prev) => {
@@ -57,104 +51,76 @@ export default function Preview({ tree, errors }: PreviewProps) {
   };
 
   const render = (node: FsNode, depth: number) => {
-    const isFile = node.name.includes(".");
+    const isFile = isFileNode(node);
     const isCollapsed = collapsed.has(node.id);
     const hasChildren = node.children.length > 0;
-    const depthColor = gradientColor([47, 129, 247], [63, 185, 80], maxDepth ? depth / maxDepth : 0);
-    const typeColor = isFile ? TYPE_COLORS.file : TYPE_COLORS.folder;
-    const color = colorMode === "depth" ? depthColor : typeColor;
-
+    const row = (
+      <>
+        <span className={`chev ${isCollapsed ? "rot" : ""}`}>{hasChildren && <ChevronIcon />}</span>
+        <span className={`node-icon ${isFile ? "file" : "folder"}`}>{isFile ? <FileIcon /> : <FolderIcon />}</span>
+        <span className="name">{node.name}</span>
+        {node.from && (
+          <span
+            className="from-dot"
+            style={{ background: templateColors[node.from] ?? DEFAULT_TEMPLATE_COLOR }}
+            role="img"
+            aria-label={`from template ${node.from}`}
+            title={`From template ${node.from}`}
+          />
+        )}
+        {hasChildren && <span className="badge">{node.children.length}</span>}
+      </>
+    );
     return (
       <div key={node.id}>
-        <div
-          className={`preview-node ${hasChildren ? "clickable" : ""}`}
-          style={{ marginLeft: depth * INDENT }}
-          onClick={() => hasChildren && toggle(node.id)}
-          title={hasChildren ? (isCollapsed ? "Click to expand" : "Click to collapse") : node.name}
-        >
-          <span className={`chev ${isCollapsed ? "rot" : ""}`}>
-            {hasChildren && <ChevronIcon />}
-          </span>
-          <span className="node-icon" style={{ color: isFile ? "#7ee787" : "#2f81f7" }}>
-            {isFile ? <FileIcon /> : hasChildren ? <FolderIcon /> : <FolderArrowIcon />}
-          </span>
-          <span className="name" style={{ color: isFile && colorMode === "type" ? typeColor : color }} title={node.name}>
-            {node.name}
-          </span>
-          {hasChildren && (
-            <span className="badge" style={{ opacity: 0.6 }}>
-              {node.children.length}
-            </span>
-          )}
-        </div>
+        {hasChildren ? (
+          <button
+            type="button"
+            className="preview-node clickable"
+            style={{ paddingLeft: 8 + depth * INDENT }}
+            onClick={() => toggle(node.id)}
+            aria-expanded={!isCollapsed}
+            title={node.name}
+          >
+            {row}
+          </button>
+        ) : (
+          <div className="preview-node" style={{ paddingLeft: 8 + depth * INDENT }} title={node.name}>
+            {row}
+          </div>
+        )}
         {hasChildren && !isCollapsed && node.children.map((c) => render(c, depth + 1))}
       </div>
     );
   };
 
-  if (errors.length) {
-    return (
-      <div className="pane-body">
-        <div className="issue-banner error">
-          <ul>
-            {errors.map((e, i) => (
-              <li key={i}>{e}</li>
-            ))}
-          </ul>
-        </div>
-        <div className="empty-hint">
-          <div className="big">⚠️</div>
-          Preview unavailable until errors are fixed.
-        </div>
-      </div>
-    );
+  if (tree.length === 0) {
+    return <div className="empty-hint">Nothing to create yet. Add some folders first.</div>;
   }
 
   return (
-    <div className="pane-body">
-      {tree.length === 0 ? (
-        <div className="empty-hint">
-          <div className="big">🌳</div>
-          Nothing to preview yet — add some folders first.
+    <>
+      <div className="preview-toolbar">
+        <span className="section-label">Resolved preview</span>
+        <div className="preview-tools">
+          <button
+            type="button"
+            className={`link-btn ${sortAlpha ? "active" : ""}`}
+            onClick={() => setSortAlpha((s) => !s)}
+            aria-pressed={sortAlpha}
+            title="Sort alphabetically (folders first). Off shows the order they are defined in."
+          >
+            A–Z
+          </button>
+          <button type="button" className="link-btn" onClick={() => setAll(false)}>
+            Expand all
+          </button>
+          <button type="button" className="link-btn" onClick={() => setAll(true)}>
+            Collapse all
+          </button>
         </div>
-      ) : (
-        <>
-          <div className="preview-toolbar">
-            <div className="preview-mode-toggle">
-              <button
-                className={`btn ghost small ${colorMode === "depth" ? "active" : ""}`}
-                onClick={() => setColorMode("depth")}
-                title="Color names by depth gradient"
-              >
-                Depth
-              </button>
-              <button
-                className={`btn ghost small ${colorMode === "type" ? "active" : ""}`}
-                onClick={() => setColorMode("type")}
-                title="Color names by node type (folder / file)"
-              >
-                Type
-              </button>
-            </div>
-            <button
-              className={`btn ghost small ${sortAlpha ? "active" : ""}`}
-              onClick={() => setSortAlpha((s) => !s)}
-              title="Sort alphabetically (folders first, then files)"
-            >
-              A–Z
-            </button>
-            <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
-              <button className="btn ghost" onClick={() => setAll(false)}>
-                Expand all
-              </button>
-              <button className="btn ghost" onClick={() => setAll(true)}>
-                Collapse all
-              </button>
-            </div>
-          </div>
-          <div className="preview-tree">{displayTree.map((n) => render(n, 0))}</div>
-        </>
-      )}
-    </div>
+      </div>
+      <div className="preview-tree">{displayTree.map((n) => render(n, 0))}</div>
+    </>
   );
 }

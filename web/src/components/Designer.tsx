@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FsNode } from "../lib/types";
-import { makeFolder, makeInsert, moveNode, removeNode, insertChild } from "../lib/treeEdit";
+import { isFileLike, isFileNode } from "../lib/types";
+import { cloneWithNewIds } from "../lib/ids";
+import { cleanTemplateName, insertChild, insertRelative, makeFile, makeFolder, makeInsert, moveNode, removeNode } from "../lib/treeEdit";
 import { ChevronIcon, CopyIcon, FileIcon, FolderIcon, GripIcon, PlusChildIcon, PlusIcon, XIcon } from "./icons";
 import ColorPicker from "./ColorPicker";
+
+/** Drag type used when a template is dragged from the sidebar onto the tree. */
+export const TEMPLATE_MIME = "application/x-fh-template";
 
 export interface SectionRef {
   kind: "root" | "template";
@@ -23,6 +28,11 @@ interface DesignerProps {
   onAddTemplate?: (name: string) => void;
   onRenameTemplate?: (oldName: string, newName: string) => void;
   onSetTemplateColor?: (name: string, color: string) => void;
+  /** Collapsed folder ids. When provided the parent owns this state (so it survives switching sections). */
+  collapsed?: Set<string>;
+  onCollapsedChange?: (id: string, collapsed: boolean) => void;
+  /** Short message for the user (e.g. a rejected name). */
+  onNotice?: (message: string) => void;
 }
 
 interface DropState {
@@ -47,8 +57,22 @@ type AddSpec =
   | { kind: "file" }
   | { kind: "insert"; template: string };
 
-export default function Designer({ nodes, section, templates, onNodesChange, templateMap, templateColors, expandedInserts, onToggleInsert, onTemplateNodesChange, onAddTemplate, onRenameTemplate, onSetTemplateColor }: DesignerProps) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+export default function Designer({ nodes, section, templates, onNodesChange, templateMap, templateColors, expandedInserts, onToggleInsert, onTemplateNodesChange, onAddTemplate, onRenameTemplate, onSetTemplateColor, collapsed: collapsedProp, onCollapsedChange, onNotice }: DesignerProps) {
+  const [localCollapsed, setLocalCollapsed] = useState<Set<string>>(new Set());
+  const collapsed = collapsedProp ?? localCollapsed;
+  const setCollapsedFor = (id: string, value: boolean) => {
+    if (onCollapsedChange) onCollapsedChange(id, value);
+    else
+      setLocalCollapsed((prev) => {
+        const next = new Set(prev);
+        if (value) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+  };
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropState, setDropState] = useState<DropState | null>(null);
   const [editing, setEditing] = useState<EditState | null>(null);
@@ -70,16 +94,50 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
     [],
   );
 
-  const toggle = (id: string) =>
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const toggle = (id: string) => setCollapsedFor(id, !collapsed.has(id));
 
-  const handleDrop = (targetId: string, position: DropState["position"]) => {
-    if (dragId && dragId !== targetId) {
+  // Move keyboard focus to a row after the tree re-renders.
+  useEffect(() => {
+    if (!focusId) return;
+    const el = bodyRef.current?.querySelector<HTMLElement>(`[data-node-id="${CSS.escape(focusId)}"]`);
+    el?.focus();
+    setFocusId(null);
+  }, [focusId]);
+
+  const select = (id: string, focus = false) => {
+    setSelectedId(id);
+    if (focus) setFocusId(id);
+  };
+
+  /** Rows currently on screen, top to bottom (for arrow-key navigation). */
+  const visibleRows = (): { node: FsNode; path: number[] }[] => {
+    const out: { node: FsNode; path: number[] }[] = [];
+    const walk = (list: FsNode[], base: number[]) => {
+      list.forEach((n, i) => {
+        const path = [...base, i];
+        out.push({ node: n, path });
+        if (n.kind === "folder" && !isFileNode(n) && !collapsed.has(n.id)) walk(n.children, path);
+      });
+    };
+    walk(nodes, []);
+    return out;
+  };
+
+  const dropTemplate = (template: string, targetId: string | null, position: DropState["position"]) => {
+    if (section.kind === "template" && section.name === template) {
+      onNotice?.(`"${template}" can't insert itself.`);
+      return;
+    }
+    const node = makeInsert(template);
+    onNodesChange(targetId ? insertRelative(nodes, targetId, position, node) : [...nodes, node]);
+    if (targetId && position === "into") setCollapsedFor(targetId, false);
+    select(node.id);
+  };
+
+  const handleDrop = (targetId: string, position: DropState["position"], template?: string) => {
+    if (template) {
+      dropTemplate(template, targetId, position);
+    } else if (dragId && dragId !== targetId) {
       onNodesChange(moveNode(nodes, dragId, targetId, position));
     }
     setDragId(null);
@@ -97,7 +155,9 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
     const node =
       spec.kind === "insert"
         ? makeInsert(spec.template)
-        : makeFolder(spec.kind === "file" ? "Untitled.txt" : "New Folder");
+        : spec.kind === "file"
+          ? makeFile("Untitled.txt")
+          : makeFolder("New Folder");
     const parent = parentId ? findNode(nodes, parentId) : null;
     const siblings = parent ? parent.children : nodes;
     const newTree = insertChild(nodes, parentId, Math.min(Math.max(index, 0), siblings.length), node);
@@ -105,17 +165,36 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
     setMenu(null);
     const newPath = pathOf(newTree, node.id);
     setEditing(newPath ? { path: newPath, value: node.name } : null);
-    if (parentId) setCollapsed((prev) => { const n = new Set(prev); n.delete(parentId); return n; });
+    if (parentId) setCollapsedFor(parentId, false);
+    setSelectedId(node.id);
   };
 
   const renameAt = (path: number[], name: string) => {
-    if (name.trim()) onNodesChange(renameByPath(nodes, path, name.trim()));
     setEditing(null);
+    const current = nodeAt(nodes, path);
+    // A trailing slash is the .fh way to say "folder"; it is not part of the name.
+    const clean = name.trim().replace(/[\\/]+$/, "").trim();
+    if (!current || !clean || clean === current.name) return;
+    if (/^[#@]/.test(clean) || clean.includes('"')) {
+      onNotice?.("Names can't start with # or @, or contain quotes.");
+      return;
+    }
+    // Renaming never turns a folder into a file: a folder given a dotted name
+    // stays a folder (written as `name/` in the source).
+    const wasFolder = !isFileNode(current);
+    onNodesChange(
+      updateByPath(nodes, path, (n) => {
+        const next: FsNode = { ...n, name: clean };
+        if (wasFolder && isFileLike(clean)) next.forceFolder = true;
+        else delete next.forceFolder;
+        return next;
+      }),
+    );
+    setFocusId(current.id);
   };
 
   const duplicateAt = (path: number[], node: FsNode) => {
-    const clone = structuredClone(node);
-    clone.id = Math.random().toString(36).slice(2, 10);
+    const clone = cloneWithNewIds(node);
     const newTree = insertChild(nodes, path.length ? parentIdAt(nodes, path) : null, path[path.length - 1] + 1, clone);
     onNodesChange(newTree);
     const newPath = pathOf(newTree, clone.id);
@@ -124,7 +203,17 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
 
   const deleteAt = (path: number[]) => {
     const id = nodeAt(nodes, path)?.id;
-    if (id) onNodesChange(removeNode(nodes, id));
+    if (id) {
+      // Keep the keyboard somewhere sensible: the next row, else the previous one.
+      const rows = visibleRows();
+      const at = rows.findIndex((r) => r.node.id === id);
+      const isInside = (p: number[]) => p.length > path.length && path.every((v, i) => v === p[i]);
+      const after = rows.slice(at + 1).find((r) => !isInside(r.path));
+      const neighbour = after ?? rows[at - 1];
+      onNodesChange(removeNode(nodes, id));
+      if (neighbour) select(neighbour.node.id, true);
+      else setSelectedId(null);
+    }
     if (editing && pathsEqual(path, editing.path)) setEditing(null);
   };
 
@@ -135,17 +224,54 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
     if (target < 0 || target >= loc.container.length) return;
     const next = removeNode(nodes, loc.node.id);
     onNodesChange(insertChild(next, path.length ? parentIdAt(nodes, path) : null, target, loc.node));
+    setFocusId(loc.node.id);
+  };
+
+  const onRowKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, node: FsNode, path: number[]) => {
+    if (e.target !== e.currentTarget) return; // typing in a name field or a control
+    if (e.ctrlKey || e.metaKey) return;
+    const rows = visibleRows();
+    const at = rows.findIndex((r) => r.node.id === node.id);
+    const isOpenFolder = node.kind === "folder" && !isFileNode(node) && node.children.length > 0;
+    let handled = true;
+    if (e.altKey && e.key === "ArrowUp") moveAt(path, -1);
+    else if (e.altKey && e.key === "ArrowDown") moveAt(path, 1);
+    else if (e.key === "ArrowDown") {
+      if (rows[at + 1]) select(rows[at + 1].node.id, true);
+    } else if (e.key === "ArrowUp") {
+      if (rows[at - 1]) select(rows[at - 1].node.id, true);
+    } else if (e.key === "ArrowRight") {
+      if (isOpenFolder && collapsed.has(node.id)) setCollapsedFor(node.id, false);
+      else if (isOpenFolder) select(node.children[0].id, true);
+      else if (node.kind === "insert" && onToggleInsert && !expandedInserts?.has(node.id)) onToggleInsert(node.id);
+    } else if (e.key === "ArrowLeft") {
+      if (isOpenFolder && !collapsed.has(node.id)) setCollapsedFor(node.id, true);
+      else if (node.kind === "insert" && onToggleInsert && expandedInserts?.has(node.id)) onToggleInsert(node.id);
+      else {
+        const parent = path.length > 1 ? nodeAt(nodes, path.slice(0, -1)) : null;
+        if (parent) select(parent.id, true);
+      }
+    } else if (e.key === "Enter" || e.key === "F2") {
+      if (node.kind === "insert") onToggleInsert?.(node.id);
+      else setEditing({ path, value: node.name });
+    } else if (e.key === "Delete" || e.key === "Backspace") deleteAt(path);
+    else handled = false;
+    if (handled) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
   };
 
   const renderNode = (node: FsNode, depth: number, path: number[]) => {
     const isCollapsed = collapsed.has(node.id);
     const children = node.children;
-    const isFile = node.name.includes(".");
+    const isFile = isFileNode(node);
+    const isSelected = selectedId === node.id;
     const insertable = node.kind === "folder" && !isFile;
     const dropTarget = dropState?.targetId === node.id ? dropState.position : null;
     const isEditing = editing ? pathsEqual(path, editing.path) : false;
     const typeClass =
-      node.kind === "insert" ? "type-insert" : node.name.includes(".") ? "type-file" : "type-folder";
+      node.kind === "insert" ? "type-insert" : isFile ? "type-file" : "type-folder";
     const insertColor = node.kind === "insert" ? templateColors?.[node.name] : undefined;
     const hasInsertChildren = node.kind === "insert" && node.children.length > 0;
     const isExpanded = node.kind === "insert" && expandedInserts?.has(node.id);
@@ -155,18 +281,32 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
     return (
       <div key={node.id}>
         <div
-          className={`tree-row ${dragId === node.id ? "dragging" : ""} ${dropTarget ? "droppable" : ""} ${isExpanded ? "insert-expanded-row" : ""}`}
+          className={`tree-row ${isSelected ? "selected" : ""} ${dragId === node.id ? "dragging" : ""} ${dropTarget ? `droppable drop-${dropTarget}` : ""} ${isExpanded ? "insert-expanded-row" : ""}`}
+          data-node-id={node.id}
+          role="treeitem"
+          aria-selected={isSelected}
+          aria-level={depth + 1}
+          aria-expanded={insertable && children.length > 0 ? !isCollapsed : undefined}
+          tabIndex={isSelected || (!selectedId && depth === 0 && path[0] === 0) ? 0 : -1}
+          onClick={() => setSelectedId(node.id)}
+          onFocus={(e) => {
+            if (e.target === e.currentTarget) setSelectedId(node.id);
+          }}
+          onKeyDown={(e) => onRowKeyDown(e, node, path)}
           style={{ marginLeft: depth * 20, ...(hasInsertChildren && insertColor ? { borderLeftColor: insertColor, borderLeftWidth: 3, borderLeftStyle: "solid" } : {}) }}
           title={node.kind === "insert" ? `Double-click to ${isExpanded ? "collapse" : "expand"} template "${node.name}"` : undefined}
           onDoubleClick={node.kind === "insert" && onToggleInsert ? () => onToggleInsert(node.id) : undefined}
           onDragOver={(e) => {
+            const isTemplate = e.dataTransfer.types.includes(TEMPLATE_MIME);
+            if (!dragId && !isTemplate) return; // e.g. a file dragged in from the desktop
             e.preventDefault();
-            e.dataTransfer.dropEffect = "move";
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = isTemplate ? "copy" : "move";
             const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
             const y = e.clientY - rect.top;
             const third = rect.height / 3;
             let position: DropState["position"];
-            if (node.kind === "folder") {
+            if (insertable) {
               position = y < third ? "before" : y > rect.height - third ? "after" : "into";
             } else {
               position = y < third ? "before" : "after";
@@ -181,8 +321,12 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
             }
           }}
           onDrop={(e) => {
+            const template = e.dataTransfer.getData(TEMPLATE_MIME);
+            if (!dragId && !template) return;
             e.preventDefault();
-            handleDrop(node.id, dropState?.targetId === node.id ? dropState.position : "into");
+            e.stopPropagation();
+            const fallback = insertable ? "into" : "after";
+            handleDrop(node.id, dropState?.targetId === node.id ? dropState.position : fallback, template || undefined);
           }}
         >
           {insertable && children.length > 0 ? (
@@ -208,13 +352,14 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
             <GripIcon />
           </span>
           <span className={`node-icon ${node.kind === "folder" ? "folder" : "insert"}`} style={insertColor ? { color: insertColor } : undefined}>
-            {node.kind === "folder" ? (node.name.includes(".") ? <FileIcon /> : <FolderIcon />) : <CopyIcon />}
+            {node.kind === "folder" ? (isFile ? <FileIcon /> : <FolderIcon />) : <CopyIcon />}
           </span>
 
           <span className="name-zone">
             {node.kind === "insert" ? (
               <span className="insert-picker">
                 <select
+                  aria-label="Template to insert"
                   value={node.name}
                   onChange={(e) => onNodesChange(updateName(nodes, node.id, e.target.value))}
                   onDragOver={(e) => e.stopPropagation()}
@@ -243,9 +388,9 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
               />
             )}
 
-            {node.kind === "folder" && (
-              <span className="count">
-                {children.length} {children.length === 1 ? "child" : "children"}
+            {insertable && children.length > 0 && (
+              <span className="count" title={`${children.length} ${children.length === 1 ? "item" : "items"} inside`}>
+                {children.length}
               </span>
             )}
           </span>
@@ -285,7 +430,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
         </div>
 
         {node.kind === "insert" && expandedInserts?.has(node.id) && templateMap?.[node.name] && (
-          <div className="insert-expanded" style={{ marginLeft: (depth + 1) * 20, "--template-color": templateColors?.[node.name] ?? "#bc8cff" } as React.CSSProperties}>
+          <div className="insert-expanded" style={{ marginLeft: (depth + 1) * 20, "--template-color": templateColors?.[node.name] ?? "#f0b35a" } as React.CSSProperties}>
             <div className="insert-expanded-header">
               {editingTemplateName?.id === node.name ? (
                 <input
@@ -323,7 +468,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
               )}
               {onSetTemplateColor && (
                 <ColorPicker
-                  value={templateColors?.[node.name] ?? "#bc8cff"}
+                  value={templateColors?.[node.name] ?? "#f0b35a"}
                   onChange={(c) => onSetTemplateColor(node.name, c)}
                 />
               )}
@@ -348,6 +493,9 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
               onAddTemplate={onAddTemplate}
               onRenameTemplate={onRenameTemplate}
               onSetTemplateColor={onSetTemplateColor}
+              collapsed={collapsedProp}
+              onCollapsedChange={onCollapsedChange}
+              onNotice={onNotice}
             />
           </div>
         )}
@@ -358,13 +506,33 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
   };
 
   return (
-    <div className={`designer-body ${dragId ? "dragging-active" : ""}`}>
+    <div
+      ref={bodyRef}
+      role="tree"
+      aria-label={section.kind === "root" ? "Root structure" : `Template ${section.name}`}
+      className={`designer-body ${dragId ? "dragging-active" : ""}`}
+      onDragOver={(e) => {
+        // Dropping a sidebar template on empty space appends it to the end.
+        if (!e.dataTransfer.types.includes(TEMPLATE_MIME)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "copy";
+      }}
+      onDrop={(e) => {
+        const template = e.dataTransfer.getData(TEMPLATE_MIME);
+        if (!template) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dropTemplate(template, null, "after");
+        setDropState(null);
+      }}
+    >
       {nodes.length === 0 ? (
         <div className="empty-hint">
-          <div className="big">📁</div>
+          <div className="big"><FolderIcon size={28} /></div>
           {section.kind === "root"
-            ? "Design the root structure — add folders, files, or reusable structures."
-            : `Template "@${section.name}" is empty — add folders or insert another template.`}
+            ? "Nothing here yet. Add folders or files, or drag a template in from the left."
+            : `Template "${section.name}" is empty. Add folders, or insert another template.`}
           <div style={{ marginTop: 12, display: "flex", justifyContent: "center", gap: 6 }}>
             <AddButton
               label="Add…"
@@ -406,7 +574,7 @@ function AddButton({
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   return (
-    <button className="btn" onClick={onClick} onMouseDown={(e) => e.stopPropagation()} title="Add folder, file, or structure">
+    <button className="btn" onClick={onClick} onMouseDown={(e) => e.stopPropagation()} title="Add a folder, file or template">
       <PlusIcon /> {label}
     </button>
   );
@@ -505,7 +673,7 @@ function PlusDropdownCreateTemplate({
   const [name, setName] = useState("");
 
   const commit = () => {
-    const n = name.trim();
+    const n = cleanTemplateName(name);
     if (n) {
       onAddTemplate(n);
       onAdd({ kind: "insert", template: n });
@@ -560,6 +728,8 @@ function IconButton({
     <button
       className={`icon-btn ${className ?? ""}`}
       title={title}
+      aria-label={title}
+      tabIndex={-1}
       onClick={onClick}
       onMouseDown={(e) => e.stopPropagation()}
       disabled={disabled}
@@ -588,6 +758,7 @@ function NodeName({
     return (
       <input
         className="name editing"
+        aria-label="Name"
         autoFocus
         onFocus={(e) => e.target.select()}
         value={value}
@@ -596,6 +767,7 @@ function NodeName({
         onKeyDown={(e) => {
           if (e.key === "Enter") onCommit(value);
           if (e.key === "Escape") onCommit(node.name);
+          if (e.key === "Enter" || e.key === "Escape") e.preventDefault();
           e.stopPropagation();
         }}
       />
@@ -662,11 +834,11 @@ function updateName(nodes: FsNode[], id: string, name: string): FsNode[] {
   return nodes.map((n) => (n.id === id ? { ...n, name } : { ...n, children: updateName(n.children, id, name) }));
 }
 
-function renameByPath(nodes: FsNode[], path: number[], name: string): FsNode[] {
+function updateByPath(nodes: FsNode[], path: number[], updater: (n: FsNode) => FsNode): FsNode[] {
   if (path.length === 1) {
-    return nodes.map((n, i) => (i === path[0] ? { ...n, name } : n));
+    return nodes.map((n, i) => (i === path[0] ? updater(n) : n));
   }
   return nodes.map((n, i) =>
-    i === path[0] ? { ...n, children: renameByPath(n.children, path.slice(1), name) } : n,
+    i === path[0] ? { ...n, children: updateByPath(n.children, path.slice(1), updater) } : n,
   );
 }

@@ -13,12 +13,12 @@ const { pathToFileURL } = require("node:url");
 const DIST_DIR = path.join(__dirname, "..", "dist");
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 
-// Matches .header in src/index.css (padding 10px + 26px brand row) and the
-// GitHub-ish palette variables (--bg-elev / --text) so the native window
-// controls blend into the app's own header.
-const TITLEBAR_HEIGHT = 46;
-const TITLEBAR_COLOR = "#161b22";
-const TITLEBAR_SYMBOL_COLOR = "#e6edf3";
+// Matches .header in src/index.css (--header-h) and its palette variables
+// (--bg-elev / --text) so the native window controls blend into the app's own
+// header. Keep these three in sync with the stylesheet.
+const TITLEBAR_HEIGHT = 50;
+const TITLEBAR_COLOR = "#191c1f";
+const TITLEBAR_SYMBOL_COLOR = "#eceae4";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -37,10 +37,10 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
-    minWidth: 960,
+    minWidth: 900,
     minHeight: 600,
     title: "Folder Hierarchy Studio",
-    backgroundColor: "#0d1117",
+    backgroundColor: "#121416",
     autoHideMenuBar: true,
     // The app's own header becomes the title bar: it is a CSS drag region and
     // Windows draws min/max/close on top of it via the overlay below.

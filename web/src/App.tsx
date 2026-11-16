@@ -1,30 +1,39 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
 import ColumnResizer from "./components/ColumnResizer";
-import PreviewPane from "./components/panes/PreviewPane";
-import RootDesignerPane from "./components/panes/RootDesignerPane";
-import SourcePane from "./components/panes/SourcePane";
-import TemplatesPane from "./components/panes/TemplatesPane";
-import LeftRail from "./components/LeftRail";
+import CreateDialog from "./components/CreateDialog";
+import EditorPane from "./components/EditorPane";
+import type { EditorMode } from "./components/EditorPane";
+import OutputPane from "./components/OutputPane";
+import Sidebar from "./components/Sidebar";
+import type { SectionRef } from "./components/Designer";
 import {
   BrandMarkIcon,
-  CodeIcon,
-  CopyIcon,
-  DownloadIcon,
-  FolderArrowIcon,
-  FolderIcon,
-  MenuIcon,
-  PlusIcon,
-  SaveIcon,
-  SparkleIcon,
+  CheckIcon,
+  DotsIcon,
+  OutputIcon,
+  RedoIcon,
+  TemplatesIcon,
+  TreeIcon,
+  UndoIcon,
+  WarningIcon,
 } from "./components/icons";
-import { parseFh } from "./lib/parser";
-import { serializeFh } from "./lib/serializer";
+import { normalizeSource, useFhDocument } from "./hooks/useFhDocument";
 import { countNodes, resolveDoc, treeToText } from "./lib/resolver";
-import { copyText, downloadBlob, downloadText, saveFileAs, zipTree } from "./lib/export";
-import { createOnDisk, supportsFsAccess } from "./lib/folders";
-import { removeTemplateRefs, renameTemplateInTree } from "./lib/treeEdit";
-import type { FhDocument, FsNode } from "./lib/types";
+import {
+  copyText,
+  downloadBlob,
+  downloadText,
+  pickAndOpenFile,
+  pickAndSaveFile,
+  supportsFilePickers,
+  writeToHandle,
+  zipTree,
+} from "./lib/export";
+import { supportsFsAccess } from "./lib/folders";
+import { cleanTemplateName, countTemplateUses, removeTemplateRefs, renameTemplateInTree } from "./lib/treeEdit";
+import { planTree } from "./lib/validate";
+import { newId } from "./lib/types";
+import type { FsNode } from "./lib/types";
 
 // First-paint + offline fallback; the real startup content is fetched from
 // /samples/startup.fh in the effect below.
@@ -59,156 +68,175 @@ const SAMPLES: { value: string; label: string }[] = [
   { value: "example", label: "Example / Recursion demo" },
 ];
 
+const TEMPLATE_PALETTE = ["#bc8cff", "#f97583", "#79c0ff", "#56d4dd", "#d2a8ff", "#ffa657", "#7ee787", "#ff7b72"];
+
+const SIDEBAR_MIN = 200;
+const SIDEBAR_MAX = 420;
+const OUTPUT_MIN = 300;
+const OUTPUT_MAX = 640;
+
 interface Toast {
   id: number;
   type: "success" | "error";
   msg: string;
 }
 
-type LeftTab = "root" | "source" | "templates";
-
-// Number-key shortcuts for the left-panel tabs (1/2/3 = Root/Templates/Source).
-const LEFT_TAB_KEYS: Record<string, LeftTab> = {
-  "1": "root",
-  "2": "templates",
-  "3": "source",
-};
-
-// Rotating status-bar tips; cycles on a timer so the footer stays informative
-// without stealing space from the panes.
-const TIPS = [
-  "double-click to rename · drag to move · ＋ to add · double-click @insert to expand",
-  "Names with a dot are files; everything else is a folder",
-  "Click a color swatch to style @root or a @template",
-  "Drop a .fh file anywhere to open it",
-  "Ctrl+S saves · Ctrl+O opens · Ctrl+Z undoes",
-  "Right-click a row for its controls",
-];
+type MobileTab = "structure" | "templates" | "output";
 
 let toastSeq = 0;
 
-function emptyDoc(source: string): FhDocument {
-  return (
-    parseFh(source).doc ?? {
-      version: "1.0",
-      name: "Untitled Structure",
-      root: [],
-      templates: {},
-      templateOrder: [],
-      templateColors: {},
-    }
-  );
-}
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 export default function App() {
-  const [source, setSource] = useState(DEFAULT_SOURCE);
+  const fh = useFhDocument(DEFAULT_SOURCE);
+  const { doc, source, dirty, commitDoc, applySource, load, undo, redo } = fh;
+
   const [fileName, setFileName] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState<string | null>(null);
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const [sample, setSample] = useState("");
-  const [leftPane, setLeftPane] = useState<LeftTab>("root");
-  const [mobileTab, setMobileTab] = useState<"source" | "templates" | "root" | "preview">("root");
+  const [fileHandle, setFileHandle] = useState<FileSystemFileHandle | null>(null);
+  const [section, setSection] = useState<SectionRef>({ kind: "root" });
+  const [mode, setMode] = useState<EditorMode>("tree");
+  const [mobileTab, setMobileTab] = useState<MobileTab>("structure");
+  const [sidebarW, setSidebarW] = useState(252);
+  const [outputW, setOutputW] = useState(400);
+  const [createOpen, setCreateOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
-  const [tipIndex, setTipIndex] = useState(0);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const baselineRef = useRef(DEFAULT_SOURCE);
   const moreRef = useRef<HTMLDivElement>(null);
-
-  // The leftmost column shows whichever panel the vertical rail tab maps to
-  // (Root / Source / Templates). Only one column + Preview => two columns; the
-  // rail tab simply switches which panel occupies it. On mobile the Source /
-  // Templates / Root tabs pick the panel, and Preview is its own tab.
-  const selectLeftPane = useCallback((tab: LeftTab) => {
-    setLeftPane(tab);
-    setMobileTab(tab);
-  }, []);
-
-  const leftPanels: { id: LeftTab; icon: ReactNode; label: string }[] = [
-    { id: "root", icon: <FolderIcon />, label: "Root" },
-    { id: "templates", icon: <SparkleIcon />, label: "Templates" },
-    { id: "source", icon: <CodeIcon />, label: "Source" },
-  ];
-
-  type PaneId = "left" | "preview";
-  const MIN_PCT = 20;
-  const MAX_PCT = 70;
-  const RESIZER_W = 12;
-  const mainRef = useRef<HTMLElement>(null);
-  const [colPct, setColPct] = useState<Record<PaneId, number>>({
-    left: 50,
-    preview: 0, // preview is flex-fill; not stored
-  });
-
-  // The left column and Preview split the usable space 50/50.
-  const evenSplit = useCallback(() => {
-    const el = mainRef.current;
-    const cs = el ? getComputedStyle(el) : null;
-    const padL = parseFloat(cs?.paddingLeft ?? "0") || 0;
-    const padR = parseFloat(cs?.paddingRight ?? "0") || 0;
-    const resizers = RESIZER_W;
-    const usablePx = el && el.clientWidth > resizers + padL + padR
-      ? el.clientWidth - resizers - padL - padR
-      : (el?.clientWidth ?? window.innerWidth);
-    const usablePct = (usablePx / (el?.clientWidth ?? usablePx)) * 100;
-    setColPct({ left: usablePct / 2, preview: 0 });
-  }, []);
-
-  useEffect(() => {
-    evenSplit();
-    window.addEventListener("resize", evenSplit);
-    return () => window.removeEventListener("resize", evenSplit);
-  }, [evenSplit]);
-
-  const handleColumnResize = useCallback(
-    (left: PaneId, right: PaneId) => (dx: number) => {
-      const width = mainRef.current?.clientWidth ?? window.innerWidth;
-      const dPct = (dx / width) * 100;
-      setColPct((prev) => {
-        const clamp = (v: number) => Math.min(MAX_PCT, Math.max(MIN_PCT, v));
-        const next: Record<PaneId, number> = { ...prev, [left]: clamp((prev[left] ?? 50) + dPct) };
-        if (right !== "preview") {
-          next[right] = clamp((prev[right] ?? 50) - dPct);
-        }
-        return next;
-      });
-    },
-    [],
-  );
-
-  const MAX_HISTORY = 30;
-  const pastRef = useRef<string[]>([]);
-  const futureRef = useRef<string[]>([]);
-  const sourceRef = useRef(DEFAULT_SOURCE);
-  const lastApplyRef = useRef(0);
 
   const notify = useCallback((msg: string, type: Toast["type"] = "success") => {
     const id = ++toastSeq;
     setToasts((prev) => [...prev, { id, type, msg }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4200);
   }, []);
+  const notice = useCallback((msg: string) => notify(msg, "error"), [notify]);
 
-  const parsed = useMemo(() => parseFh(source), [source]);
-  const doc = useMemo(() => emptyDoc(source), [source]);
+  // ---------------- Derived output ----------------
   const resolved = useMemo(() => resolveDoc(doc), [doc]);
+  const plan = useMemo(() => planTree(resolved.tree), [resolved.tree]);
+  const stats = useMemo(() => countNodes(plan.tree), [plan.tree]);
+  const uses = useMemo(() => countTemplateUses([doc.root, ...Object.values(doc.templates)]), [doc]);
+  // Display colors: templates without a color in the file get one from the
+  // palette by position, so they can be told apart. Nothing is written back
+  // until the user actually picks a color.
+  const colors = useMemo(() => {
+    const out: Record<string, string> = {};
+    doc.templateOrder.forEach((name, i) => (out[name] = TEMPLATE_PALETTE[i % TEMPLATE_PALETTE.length]));
+    return { ...out, ...doc.templateColors };
+  }, [doc.templateOrder, doc.templateColors]);
 
-  // Every source change goes through here so it can be undone. Rapid typing
-  // (within 800ms) is coalesced into one undo step; discrete actions always push.
-  const applySource = useCallback((next: string, discrete = false) => {
-    if (next === sourceRef.current) return;
-    const now = Date.now();
-    if (!discrete && now - lastApplyRef.current < 800 && pastRef.current.length) {
-      pastRef.current = [...pastRef.current.slice(0, -1), sourceRef.current];
-    } else {
-      pastRef.current = [...pastRef.current.slice(-(MAX_HISTORY - 1)), sourceRef.current];
-    }
-    lastApplyRef.current = now;
-    futureRef.current = [];
-    sourceRef.current = next;
-    setSource(next);
+  const parseErrors = fh.issues.filter((i) => i.severity === "error").length;
+  const parseWarnings = fh.issues.length - parseErrors;
+  const errorCount = parseErrors + resolved.errors.length + plan.errors;
+  const warningCount = parseWarnings + plan.warnings + (plan.duplicates ? 1 : 0);
+
+  // If the selected template disappears (delete, undo, new file), fall back to Root.
+  useEffect(() => {
+    if (section.kind === "template" && !doc.templates[section.name!]) setSection({ kind: "root" });
+  }, [section, doc.templates]);
+
+  const selectSection = useCallback((next: SectionRef) => {
+    setSection(next);
+    setMode("tree");
+    setMobileTab("structure");
   }, []);
 
-  // On boot, load the startup sample from /samples so the shipped file is the
-  // single source of truth; keep the built-in default if the fetch fails.
+  // ---------------- File I/O ----------------
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  const confirmDiscard = useCallback(
+    () => !dirtyRef.current || window.confirm("You have unsaved changes. Discard them and continue?"),
+    [],
+  );
+
+  const openText = useCallback(
+    (text: string, name: string | null, handle: FileSystemFileHandle | null) => {
+      load(text);
+      setFileName(name);
+      setFileHandle(handle);
+      setSection({ kind: "root" });
+      setNameDraft(null);
+    },
+    [load],
+  );
+
+  const openFile = useCallback(async () => {
+    if (!supportsFilePickers()) {
+      fileRef.current?.click();
+      return;
+    }
+    if (!confirmDiscard()) return;
+    try {
+      const opened = await pickAndOpenFile();
+      if (opened) openText(opened.text, opened.name, opened.handle);
+    } catch (err) {
+      notify(`Could not open the file: ${(err as Error).message}`, "error");
+    }
+  }, [confirmDiscard, notify, openText]);
+
+  const openFromInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !confirmDiscard()) return;
+    openText(await file.text(), file.name, null);
+  };
+
+  const loadSample = async (value: string) => {
+    setMoreOpen(false);
+    if (!confirmDiscard()) return;
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}samples/${value}.fh`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Samples are starting points, not files to overwrite: no handle is kept.
+      openText(await res.text(), `${value}.fh`, null);
+      notify(`Loaded sample "${value}.fh".`);
+    } catch (err) {
+      notify(`Could not load sample: ${(err as Error).message}`, "error");
+    }
+  };
+
+  const suggestedName = fileName ?? `${doc.name}.fh`;
+
+  const saveAs = useCallback(async () => {
+    setMoreOpen(false);
+    const name = suggestedName.replace(/\.(pbkstruct|txt)$/i, ".fh");
+    try {
+      if (supportsFilePickers()) {
+        const handle = await pickAndSaveFile(source, name);
+        if (!handle) return;
+        setFileHandle(handle);
+        setFileName(handle.name);
+        notify(`Saved ${handle.name}.`);
+      } else {
+        downloadText(source, name);
+        notify(`Downloaded ${name}.`);
+      }
+      fh.markSaved();
+    } catch (err) {
+      notify(`Save failed: ${(err as Error).message}`, "error");
+    }
+  }, [fh, notify, source, suggestedName]);
+
+  // Ctrl+S writes straight back to the opened file; it only prompts the first time.
+  const save = useCallback(async () => {
+    if (!fileHandle) return saveAs();
+    try {
+      await writeToHandle(fileHandle, source);
+      fh.markSaved();
+      notify(`Saved ${fileHandle.name}.`);
+    } catch (err) {
+      notify(`Save failed: ${(err as Error).message}`, "error");
+    }
+  }, [fh, fileHandle, notify, saveAs, source]);
+
+  const newDoc = () => {
+    if (!confirmDiscard()) return;
+    openText(BLANK_SOURCE, null, null);
+  };
+
+  // On boot, load the startup sample so the shipped file is the single source
+  // of truth; keep the built-in default if the fetch fails.
   useEffect(() => {
     let cancelled = false;
     fetch(`${import.meta.env.BASE_URL}samples/startup.fh`)
@@ -217,331 +245,169 @@ export default function App() {
         return res.text();
       })
       .then((text) => {
-        if (cancelled) return;
-        baselineRef.current = text;
-        applySource(text, true);
-        setFileName("startup.fh");
+        if (!cancelled && !dirtyRef.current) openText(text, "startup.fh", null);
       })
       .catch(() => {
-        /* fetch failed — stay on the built-in default */
+        /* stay on the built-in default */
       });
     return () => {
       cancelled = true;
     };
-  }, [applySource]);
+  }, [openText]);
 
-  const undo = useCallback(() => {
-    const prev = pastRef.current[pastRef.current.length - 1];
-    if (prev === undefined) return;
-    futureRef.current = [...futureRef.current, sourceRef.current].slice(-MAX_HISTORY);
-    pastRef.current = pastRef.current.slice(0, -1);
-    sourceRef.current = prev;
-    setSource(prev);
-  }, []);
-
-  const redo = useCallback(() => {
-    const next = futureRef.current[futureRef.current.length - 1];
-    if (next === undefined) return;
-    pastRef.current = [...pastRef.current, sourceRef.current].slice(-MAX_HISTORY);
-    futureRef.current = futureRef.current.slice(0, -1);
-    sourceRef.current = next;
-    setSource(next);
-  }, []);
-
-  // Serializes a document derived from the FRESHEST source (sourceRef.current),
-  // not the render-time snapshot. Several designer flows fire multiple commits
-  // in one tick (e.g. "New template…" adds the template section and inserts an
-  // @insert row); building each commit from the previous source keeps them
-  // from overwriting one another.
-  const commitDoc = useCallback(
-    (update: (d: FhDocument) => FhDocument) => {
-      const current = emptyDoc(sourceRef.current);
-      applySource(serializeFh(update(current)), true);
-    },
-    [applySource],
-  );
-
-  const dirty = source !== baselineRef.current;
-
-  const handleRootChange = useCallback(
-    (nodes: FsNode[]) => {
-      commitDoc((d) => ({ ...d, root: nodes }));
-    },
-    [commitDoc],
-  );
-
-  const handleTemplateChange = useCallback(
-    (nodes: FsNode[]) => {
-      if (!activeSection) return;
-      commitDoc((d) => ({ ...d, templates: { ...d.templates, [activeSection]: nodes } }));
-    },
-    [activeSection, commitDoc],
-  );
-
-  const handleTemplateNodesChange = useCallback(
-    (templateName: string, nodes: FsNode[]) => {
-      commitDoc((d) => ({ ...d, templates: { ...d.templates, [templateName]: nodes } }));
-    },
-    [commitDoc],
-  );
-
-  const confirmDiscard = () => !dirty || window.confirm("You have unsaved changes — discard them and continue?");
-
-  // ---------------- File I/O ----------------
-  const handleOpenFile = useCallback(
-    (file: File) => {
-      if (!confirmDiscard()) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const text = String(reader.result ?? "");
-        baselineRef.current = text;
-        applySource(text, true);
-        setFileName(file.name);
-        setActiveSection(null);
-      };
-      reader.readAsText(file);
-    },
-    [dirty],
-  );
-
-  const openFromInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleOpenFile(file);
-    e.target.value = "";
-  };
-
-  const loadSample = async (value: string) => {
-    if (!value) return;
-    if (!confirmDiscard()) {
-      setSample("");
-      return;
-    }
-    try {
-      const res = await fetch(`${import.meta.env.BASE_URL}samples/${value}.fh`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const text = await res.text();
-      baselineRef.current = text;
-      applySource(text, true);
-      setFileName(`${value}.fh`);
-      setActiveSection(null);
-      notify(`Loaded sample "${value}.fh".`);
-    } catch (err) {
-      notify(`Could not load sample: ${(err as Error).message}`, "error");
-    } finally {
-      setSample("");
-    }
-  };
-
-  const saveFh = useCallback(async () => {
-    const name = fileName ?? `${doc.name}.fh`;
-    const text = serializeFh(doc);
-    try {
-      const saved = await saveFileAs(text, name);
-      if (!saved) downloadText(text, name);
-    } catch (err) {
-      notify(`Save failed: ${(err as Error).message}`, "error");
-      return;
-    }
-    baselineRef.current = source;
-    notify("Saved .fh file.");
-  }, [doc, fileName, source, notify]);
-
-  // Edits the @name directive; keeps the header filename in sync.
-  const setDocName = (value: string) => {
-    const trimmed = value.trim();
-    commitDoc((d) => ({ ...d, name: trimmed || "Untitled Structure" }));
-    if (trimmed) setFileName(`${trimmed}.fh`);
-  };
-
-  // Edits the header filename; also writes the @name line.
-  const renameFile = (value: string) => {
-    const base = value.trim().replace(/\.fh$/i, "").trim();
-    setFileName(base ? `${base}.fh` : null);
-    if (base) commitDoc((d) => ({ ...d, name: base }));
-  };
+  // ---------------- Output actions ----------------
+  const blocked = resolved.errors.length > 0 || plan.errors > 0;
 
   const copyStructure = async () => {
-    if (!resolved.tree.length) {
-      notify("Nothing to copy yet.", "error");
-      return;
-    }
-    const ok = await copyText(treeToText(resolved.tree).join("\n"));
-    notify(ok ? "Resolved structure copied to clipboard." : "Copy failed — try again.", ok ? "success" : "error");
+    const ok = await copyText(treeToText(plan.tree).join("\n"));
+    notify(ok ? "Structure copied to the clipboard." : "Copy failed. Try again.", ok ? "success" : "error");
   };
 
   const downloadZip = async () => {
-    if (!resolved.tree.length) {
-      notify("Nothing to zip yet.", "error");
-      return;
-    }
-    const blob = await zipTree(resolved.tree, fileName ?? "structure.fh");
-    downloadBlob(blob, (fileName ?? "structure").replace(/\.fh$/i, "") + ".zip");
-    notify("Structure zip downloaded.");
+    if (blocked) return;
+    const blob = await zipTree(plan.tree);
+    downloadBlob(blob, suggestedName.replace(/\.[^.]+$/, "") + ".zip");
+    notify("Zip downloaded.");
   };
 
-  const createFolders = async () => {
-    if (!supportsFsAccess()) {
-      notify("Folder creation needs Chrome/Edge (File System Access API) on localhost or https.", "error");
-      return;
-    }
-    try {
-      const res = await createOnDisk(resolved.tree, () => window.showDirectoryPicker!());
-      notify(`Created ${res.created} folders/files in "${res.target}".`, "success");
-    } catch (err) {
-      if ((err as Error).name === "AbortError") return;
-      notify(`Failed to create folders: ${(err as Error).message}`, "error");
-    }
+  // ---------------- Document edits ----------------
+  const commitName = () => {
+    if (nameDraft === null) return;
+    const name = nameDraft.trim() || "Untitled Structure";
+    setNameDraft(null);
+    if (name !== doc.name) commitDoc((d) => ({ ...d, name }));
   };
 
-  const newDoc = () => {
-    if (!confirmDiscard()) return;
-    baselineRef.current = BLANK_SOURCE;
-    applySource(BLANK_SOURCE, true);
-    setFileName(null);
-    setActiveSection(null);
-  };
+  const handleRootChange = useCallback((nodes: FsNode[]) => commitDoc((d) => ({ ...d, root: nodes })), [commitDoc]);
 
-  // ---------------- Template ops ----------------
-  const TEMPLATE_PALETTE = [
-    "#bc8cff", "#f97583", "#79c0ff", "#56d4dd",
-    "#d2a8ff", "#ffa657", "#7ee787", "#ff7b72",
-  ];
+  const handleTemplateNodesChange = useCallback(
+    (template: string, nodes: FsNode[]) => commitDoc((d) => ({ ...d, templates: { ...d.templates, [template]: nodes } })),
+    [commitDoc],
+  );
 
-  const addTemplate = (name: string) => {
+  const createTemplate = (raw: string, starter: FsNode[]): string | null => {
+    const name = cleanTemplateName(raw);
+    if (!name) return null;
     if (doc.templates[name]) {
       notify(`Template "${name}" already exists.`, "error");
-      return;
+      return null;
     }
-    commitDoc((d) => {
-      const colorIndex = d.templateOrder.length % TEMPLATE_PALETTE.length;
-      return {
-        ...d,
-        templates: { ...d.templates, [name]: [] },
-        templateOrder: [...d.templateOrder, name],
-        templateColors: { ...d.templateColors, [name]: TEMPLATE_PALETTE[colorIndex] },
-      };
-    });
-    setActiveSection(name);
-    notify(`Added template "${name}".`);
+    commitDoc((d) => ({
+      ...d,
+      templates: { ...d.templates, [name]: starter },
+      templateOrder: [...d.templateOrder, name],
+      templateColors: { ...d.templateColors, [name]: TEMPLATE_PALETTE[d.templateOrder.length % TEMPLATE_PALETTE.length] },
+      templateComments: d.templateOrder.length
+        ? d.templateComments
+        : { ...d.templateComments, [name]: ["#---Templates---"] },
+    }));
+    return name;
   };
 
-  const renameTemplate = (oldName: string, newName: string) => {
+  const addTemplate = (raw: string) => {
+    const name = createTemplate(raw, []);
+    if (name) {
+      selectSection({ kind: "template", name });
+      notify(`Added template "${name}".`);
+    }
+  };
+
+  // "New template…" from a row's Add menu: the menu inserts it right after.
+  const createTemplateFromInsert = (raw: string) => {
+    createTemplate(raw, [{ id: newId(), kind: "folder", name: "New Folder", forceFolder: true, children: [] }]);
+  };
+
+  const renameTemplate = (oldName: string, raw: string) => {
+    const newName = cleanTemplateName(raw);
+    if (!newName || newName === oldName) return;
     if (doc.templates[newName]) {
       notify(`Template "${newName}" already exists.`, "error");
       return;
     }
-    commitDoc((d) => {
-      const templates: Record<string, FsNode[]> = {};
-      for (const [k, v] of Object.entries(d.templates)) {
-        templates[k === oldName ? newName : k] = renameTemplateInTree(v, oldName, newName);
-      }
-      const root = renameTemplateInTree(d.root, oldName, newName);
-      const templateColors = { ...d.templateColors };
-      if (templateColors[oldName]) {
-        templateColors[newName] = templateColors[oldName];
-        delete templateColors[oldName];
-      }
-      return {
-        ...d,
-        root,
-        templates,
-        templateOrder: d.templateOrder.map((t) => (t === oldName ? newName : t)),
-        templateColors,
-      };
-    });
-    if (activeSection === oldName) setActiveSection(newName);
+    const swap = <T,>(rec: Record<string, T>): Record<string, T> =>
+      Object.fromEntries(Object.entries(rec).map(([k, v]) => [k === oldName ? newName : k, v]));
+    commitDoc((d) => ({
+      ...d,
+      root: renameTemplateInTree(d.root, oldName, newName),
+      templates: Object.fromEntries(
+        Object.entries(d.templates).map(([k, v]) => [k === oldName ? newName : k, renameTemplateInTree(v, oldName, newName)]),
+      ),
+      templateOrder: d.templateOrder.map((t) => (t === oldName ? newName : t)),
+      templateColors: swap(d.templateColors),
+      templateComments: swap(d.templateComments),
+    }));
+    if (section.kind === "template" && section.name === oldName) setSection({ kind: "template", name: newName });
     notify(`Renamed "${oldName}" to "${newName}".`);
   };
 
   const deleteTemplate = (name: string) => {
-    commitDoc((d) => {
-      const templates: Record<string, FsNode[]> = {};
-      for (const [k, v] of Object.entries(d.templates)) if (k !== name) templates[k] = removeTemplateRefs(v, name);
-      const templateColors = { ...d.templateColors };
-      delete templateColors[name];
-      return {
-        ...d,
-        root: removeTemplateRefs(d.root, name),
-        templates,
-        templateOrder: d.templateOrder.filter((t) => t !== name),
-        templateColors,
-      };
-    });
-    if (activeSection === name) setActiveSection(null);
-    notify(`Deleted template "${name}" and its @insert references.`);
-  };
-
-  const setTemplateColor = (name: string, color: string) => {
+    const drop = <T,>(rec: Record<string, T>): Record<string, T> =>
+      Object.fromEntries(Object.entries(rec).filter(([k]) => k !== name));
     commitDoc((d) => ({
       ...d,
-      templateColors: { ...d.templateColors, [name]: color },
+      root: removeTemplateRefs(d.root, name),
+      templates: Object.fromEntries(
+        Object.entries(d.templates)
+          .filter(([k]) => k !== name)
+          .map(([k, v]) => [k, removeTemplateRefs(v, name)]),
+      ),
+      templateOrder: d.templateOrder.filter((t) => t !== name),
+      templateColors: drop(d.templateColors),
+      templateComments: drop(d.templateComments),
     }));
+    notify(`Deleted template "${name}" and its @insert lines. Undo brings it back.`);
   };
 
-  const createTemplateFromInsert = (name: string) => {
-    if (doc.templates[name]) {
-      notify(`Template "${name}" already exists.`, "error");
-      return;
-    }
-    commitDoc((d) => {
-      const colorIndex = d.templateOrder.length % TEMPLATE_PALETTE.length;
-      return {
-        ...d,
-        templates: { ...d.templates, [name]: [{ id: "1", kind: "folder", name: "New Folder", children: [] }] },
-        templateOrder: [...d.templateOrder, name],
-        templateColors: { ...d.templateColors, [name]: TEMPLATE_PALETTE[colorIndex] },
-      };
-    });
-    // Don't open modal - the inline expansion is handled by PlusDropdown
-    notify(`Created template "${name}" and inserted it.`);
-  };
-
-  // Always keep a template selected when one exists (initial load, file open,
-  // or after deleting the active template) so the dropdown never sits empty.
-  useEffect(() => {
-    if ((!activeSection || !doc.templates[activeSection]) && doc.templateOrder.length > 0) {
-      setActiveSection(doc.templateOrder[0]);
-    }
-  }, [activeSection, doc.templateOrder, doc.templates]);
+  const setColor = (name: string, color: string) =>
+    commitDoc((d) => ({ ...d, templateColors: { ...d.templateColors, [name]: color } }));
 
   // ---------------- Global drag & drop + shortcuts ----------------
   useEffect(() => {
-    const onDrop = (e: DragEvent) => {
-      e.preventDefault();
-      const file = e.dataTransfer?.files?.[0];
-      if (file) handleOpenFile(file);
+    const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
+    const onOver = (e: DragEvent) => {
+      if (hasFiles(e)) e.preventDefault();
     };
-    const onOver = (e: DragEvent) => e.preventDefault();
+    const onDrop = async (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      const item = e.dataTransfer?.items?.[0];
+      const file = e.dataTransfer?.files?.[0];
+      if (!file) return;
+      // Grab the handle synchronously (it is only readable during the event).
+      const handlePromise = item?.getAsFileSystemHandle?.();
+      if (!confirmDiscard()) return;
+      let handle: FileSystemFileHandle | null = null;
+      try {
+        const h = await handlePromise;
+        if (h && h.kind === "file") handle = h;
+      } catch {
+        /* no handle: the file still opens, Save will ask where to write */
+      }
+      openText(await file.text(), file.name, handle);
+    };
     const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      const inInput = target && (target.tagName === "INPUT" || target.tagName === "SELECT");
+      const target = e.target as HTMLElement | null;
+      const inField =
+        !!target && (target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "TEXTAREA");
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
-      if (mod && key === "s") {
+      if (!mod) return;
+      if (key === "s") {
         e.preventDefault();
-        saveFh();
-      } else if (mod && key === "o") {
+        if (e.shiftKey) saveAs();
+        else save();
+      } else if (key === "o") {
         e.preventDefault();
-        fileRef.current?.click();
-      } else if (mod && (key === "y" || (key === "z" && e.shiftKey))) {
-        if (!inInput) {
+        openFile();
+      } else if (key === "y" || (key === "z" && e.shiftKey)) {
+        if (!inField) {
           e.preventDefault();
           redo();
         }
-      } else if (mod && key === "z") {
-        if (!inInput) {
+      } else if (key === "z") {
+        if (!inField) {
           e.preventDefault();
           undo();
-        }
-      } else if (!mod && !e.altKey) {
-        // 1/2/3 → Root/Templates/Source (skip when typing in an editable).
-        const editable = target &&
-          (target.tagName === "INPUT" || target.tagName === "SELECT" ||
-            target.tagName === "TEXTAREA" || target.isContentEditable);
-        const tab = editable ? undefined : LEFT_TAB_KEYS[key];
-        if (tab) {
-          e.preventDefault();
-          selectLeftPane(tab);
         }
       }
     };
@@ -553,7 +419,7 @@ export default function App() {
       window.removeEventListener("drop", onDrop);
       window.removeEventListener("keydown", onKey);
     };
-  }, [handleOpenFile, saveFh, undo, redo, selectLeftPane]);
+  }, [confirmDiscard, openFile, openText, redo, save, saveAs, undo]);
 
   // Warn before leaving the page with unsaved work.
   useEffect(() => {
@@ -566,110 +432,107 @@ export default function App() {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [dirty]);
 
-  // Close the mobile overflow menu when clicking outside it.
+  // Close the More menu when clicking outside it or pressing Escape.
   useEffect(() => {
     if (!moreOpen) return;
     const onClick = (e: MouseEvent) => {
       if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
     };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMoreOpen(false);
     document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [moreOpen]);
 
-  // Cycle the status-bar tip while the app is idle.
-  useEffect(() => {
-    const id = setInterval(() => setTipIndex((i) => (i + 1) % TIPS.length), 6000);
-    return () => clearInterval(id);
-  }, []);
-
-  const stats = countNodes(resolved.tree);
-  const errors = parsed.issues.filter((i) => i.severity === "error");
-  const warnings = parsed.issues.filter((i) => i.severity === "warning");
+  const tabs: { id: MobileTab; label: string; icon: React.ReactNode }[] = [
+    { id: "structure", label: "Structure", icon: <TreeIcon size={18} /> },
+    { id: "templates", label: "Templates", icon: <TemplatesIcon size={18} /> },
+    { id: "output", label: "Output", icon: <OutputIcon size={18} /> },
+  ];
 
   return (
-    <div className="app">
+    <div className="app" data-tab={mobileTab}>
       <header className="header">
-        <div className="brand">
-          <span className="logo">
-            <BrandMarkIcon />
-          </span>
-          <small>.fh</small>
+        <div className="brand" title="Folder Hierarchy Studio">
+          <span className="logo"><BrandMarkIcon /></span>
+          <span className="brand-name">Folder Hierarchy Studio</span>
         </div>
-        <div className="filename-wrap">
+        <span className="header-sep" />
+        <div className="doc-id">
           <input
-            className="filename-input"
-            value={(fileName ?? `${doc.name}.fh`).replace(/\.fh$/i, "")}
-            onChange={(e) => renameFile(e.target.value)}
-            title="Rename the .fh file (also updates the @name line)"
+            className="text-input doc-name"
+            aria-label="Structure name"
+            title="Name of this structure (the @name line)"
+            value={nameDraft ?? doc.name}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              if (e.key === "Escape") setNameDraft(null);
+            }}
             spellCheck={false}
-            placeholder="name"
           />
-          <span className="filename-ext">.fh</span>
+          <span className="file-name" title={fileHandle ? "Saving writes back to this file" : "Not saved to a file yet"}>
+            {fileName ?? "not saved yet"}
+          </span>
+          {dirty && (
+            <span className="pill">
+              <span className="pill-dot" />
+              <span className="pill-text">Unsaved changes</span>
+            </span>
+          )}
         </div>
         <div className="spacer" />
         <div className="toolbar">
-          <select className="btn toolbar-secondary" style={{ padding: "6px 8px" }} value={sample} onChange={(e) => loadSample(e.target.value)}>
-            <option value="">Load sample…</option>
-            {SAMPLES.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-          <button className="btn" onClick={newDoc} title="New structure">
-            <PlusIcon />
+          <button type="button" className="btn icon" onClick={undo} disabled={!fh.canUndo} title="Undo (Ctrl+Z)" aria-label="Undo">
+            <UndoIcon />
           </button>
-          <button className="btn" onClick={() => fileRef.current?.click()} title="Open .fh file">
-            <FolderIcon />
+          <button type="button" className="btn icon" onClick={redo} disabled={!fh.canRedo} title="Redo (Ctrl+Y)" aria-label="Redo">
+            <RedoIcon />
           </button>
-          <button className="btn" onClick={saveFh} title="Save .fh file">
-            <SaveIcon />
+          <span className="header-sep wide-only" />
+          <button type="button" className="btn wide-only" onClick={newDoc} title="New structure">
+            New
           </button>
-          <span className="toolbar-secondary" style={{ width: 1, height: 24, background: "var(--border)" }} />
-          <button className="btn toolbar-secondary" onClick={copyStructure} title="Copy to clipboard">
-            <CopyIcon />
+          <button type="button" className="btn wide-only" onClick={openFile} title="Open a .fh file (Ctrl+O)">
+            Open
           </button>
-          <button className="btn toolbar-secondary" onClick={downloadZip} title="Download as zip">
-            <DownloadIcon />
-          </button>
-          <button className="btn success toolbar-secondary" onClick={createFolders} title="Create the folders on your disk (Chrome/Edge)">
-            <FolderArrowIcon />
+          <button type="button" className="btn" onClick={save} title={fileHandle ? `Save to ${fileHandle.name} (Ctrl+S)` : "Save (Ctrl+S)"}>
+            Save
           </button>
           <div className="more-menu" ref={moreRef}>
             <button
-              className="btn"
+              type="button"
+              className="btn icon"
               onClick={() => setMoreOpen((v) => !v)}
-              title="More actions"
+              title="More"
+              aria-label="More actions"
+              aria-haspopup="menu"
               aria-expanded={moreOpen}
             >
-              <MenuIcon />
+              <DotsIcon />
             </button>
             {moreOpen && (
-              <div className="more-dropdown">
-                <div className="more-sample">
-                  <label className="more-label">Load sample…</label>
-                  <select value={sample} onChange={(e) => { loadSample(e.target.value); setMoreOpen(false); }}>
-                    <option value="">Choose a sample…</option>
-                    {SAMPLES.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="more-dropdown" role="menu">
+                <button type="button" role="menuitem" className="more-item narrow-only" onClick={() => { setMoreOpen(false); newDoc(); }}>
+                  New
+                </button>
+                <button type="button" role="menuitem" className="more-item narrow-only" onClick={() => { setMoreOpen(false); openFile(); }}>
+                  Open…
+                </button>
+                <button type="button" role="menuitem" className="more-item" onClick={saveAs}>
+                  Save as…<kbd>Ctrl+Shift+S</kbd>
+                </button>
                 <div className="more-sep" />
-                <button className="more-item" onClick={() => { copyStructure(); setMoreOpen(false); }}>
-                  <CopyIcon />
-                  Copy to clipboard
-                </button>
-                <button className="more-item" onClick={() => { downloadZip(); setMoreOpen(false); }}>
-                  <DownloadIcon />
-                  Download as zip
-                </button>
-                <button className="more-item" onClick={() => { createFolders(); setMoreOpen(false); }}>
-                  <FolderArrowIcon />
-                  Create folders on disk
-                </button>
+                <div className="more-label">Samples</div>
+                {SAMPLES.map((s) => (
+                  <button type="button" role="menuitem" className="more-item" key={s.value} onClick={() => loadSample(s.value)}>
+                    {s.label}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -677,109 +540,86 @@ export default function App() {
         </div>
       </header>
 
-      <div className="mobile-tabs">
-        <button
-          className={`tab ${mobileTab === "root" ? "active" : ""}`}
-          onClick={() => selectLeftPane("root")}
-        >Root</button>
-        <button
-          className={`tab ${mobileTab === "templates" ? "active" : ""}`}
-          onClick={() => selectLeftPane("templates")}
-        >Templates</button>
-        <button
-          className={`tab ${mobileTab === "source" ? "active" : ""}`}
-          onClick={() => selectLeftPane("source")}
-        >Source</button>
-        <button className={`tab ${mobileTab === "preview" ? "active" : ""}`} onClick={() => setMobileTab("preview")}>Preview</button>
-      </div>
-
-      <div className="app-body">
-        <LeftRail tabs={leftPanels} active={leftPane} onToggle={selectLeftPane} />
-
-        <main className="main" ref={mainRef}>
-          {(() => {
-            const hiddenCls = mobileTab === "preview" ? "mobile-hidden" : "";
-            const flex = `0 0 ${colPct.left}%`;
-            const resizer = (
-              <ColumnResizer onResize={handleColumnResize("left", "preview")} />
-            );
-            if (leftPane === "root") {
-              return (
-                <>
-                  <RootDesignerPane
-                    className={hiddenCls}
-                    style={{ flex }}
-                    name={doc.name}
-                    onNameChange={setDocName}
-                    tree={doc.root}
-                    templates={doc.templateOrder}
-                    templateMap={doc.templates}
-                    templateColors={doc.templateColors}
-                    onNodesChange={handleRootChange}
-                    onTemplateNodesChange={handleTemplateNodesChange}
-                    onAddTemplate={createTemplateFromInsert}
-                    onRenameTemplate={renameTemplate}
-                    onSetTemplateColor={setTemplateColor}
-                  />
-                  {resizer}
-                </>
-              );
-            }
-            if (leftPane === "source") {
-              return (
-                <>
-                  <SourcePane
-                    className={hiddenCls}
-                    style={{ flex }}
-                    source={source}
-                    onChange={applySource}
-                    issues={parsed.issues}
-                    hasErrors={errors.length > 0}
-                  />
-                  {resizer}
-                </>
-              );
-            }
-            return (
-              <>
-                <TemplatesPane
-                  className={hiddenCls}
-                  style={{ flex }}
-                  templates={doc.templateOrder}
-                  active={activeSection}
-                  tree={activeSection ? doc.templates[activeSection] ?? [] : []}
-                  templateColors={doc.templateColors}
-                  onSelect={setActiveSection}
-                  onAdd={addTemplate}
-                  onRename={renameTemplate}
-                  onDelete={deleteTemplate}
-                  onSetTemplateColor={setTemplateColor}
-                  onNodesChange={handleTemplateChange}
-                />
-                {resizer}
-              </>
-            );
-          })()}
-          <PreviewPane
-            className={mobileTab !== "preview" ? "mobile-hidden" : ""}
-            style={{ flex: "1 1 0" }}
-            stats={stats}
-            tree={resolved.tree}
-            errors={resolved.errors}
-          />
-        </main>
-      </div>
+      <main className="workspace">
+        <Sidebar
+          className="pane-templates"
+          style={{ flexBasis: sidebarW }}
+          doc={doc}
+          colors={colors}
+          section={section}
+          uses={uses}
+          onSelect={selectSection}
+          onAddTemplate={addTemplate}
+        />
+        <ColumnResizer onResize={(dx) => setSidebarW((w) => clamp(w + dx, SIDEBAR_MIN, SIDEBAR_MAX))} />
+        <EditorPane
+          className="pane-structure"
+          doc={doc}
+          colors={colors}
+          section={section}
+          mode={mode}
+          onModeChange={setMode}
+          source={source}
+          onSourceChange={(text) => applySource(normalizeSource(text))}
+          issues={fh.issues}
+          uses={uses}
+          onRootChange={handleRootChange}
+          onTemplateNodesChange={handleTemplateNodesChange}
+          onCreateTemplate={createTemplateFromInsert}
+          onRenameTemplate={renameTemplate}
+          onDeleteTemplate={deleteTemplate}
+          onSetColor={setColor}
+          onNotice={notice}
+        />
+        <ColumnResizer onResize={(dx) => setOutputW((w) => clamp(w - dx, OUTPUT_MIN, OUTPUT_MAX))} />
+        <OutputPane
+          className="pane-output"
+          style={{ flexBasis: outputW }}
+          plan={plan}
+          stats={stats}
+          resolveErrors={resolved.errors}
+          templateColors={colors}
+          canCreateOnDisk={supportsFsAccess()}
+          onCreate={() => setCreateOpen(true)}
+          onZip={downloadZip}
+          onCopy={copyStructure}
+        />
+      </main>
 
       <footer className="statusbar">
-        <span className={`dot ${errors.length ? "err" : warnings.length ? "warn" : "ok"}`} />
-        <span>
-          {errors.length} error{errors.length === 1 ? "" : "s"} · {warnings.length} warning{warnings.length === 1 ? "" : "s"}
+        <span className={`status ${errorCount ? "error" : warningCount ? "warning" : "ok"}`}>
+          {errorCount || warningCount ? <WarningIcon size={12} /> : <CheckIcon size={12} />}
+          {errorCount || warningCount
+            ? `${errorCount} ${errorCount === 1 ? "error" : "errors"} · ${warningCount} ${warningCount === 1 ? "warning" : "warnings"}`
+            : "No problems found"}
         </span>
-        <span>File System Access: {supportsFsAccess() ? "available" : "not available"}</span>
-        <span className="statusbar-tip" style={{ marginLeft: "auto" }} key={tipIndex}>{TIPS[tipIndex]}</span>
+        <span className="status-tip">Double-click to rename · Drag to move · Arrow keys to navigate · Del to delete</span>
       </footer>
 
-      <div className="toasts">
+      <nav className="mobile-tabs" aria-label="Sections">
+        {tabs.map((t) => (
+          <button
+            type="button"
+            key={t.id}
+            className={mobileTab === t.id ? "active" : ""}
+            aria-current={mobileTab === t.id ? "page" : undefined}
+            onClick={() => setMobileTab(t.id)}
+          >
+            {t.icon}
+            <span>{t.label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {createOpen && (
+        <CreateDialog
+          doc={doc}
+          initialTemplate={null}
+          onClose={() => setCreateOpen(false)}
+        />
+      )}
+
+      <div className="toasts" role="status" aria-live="polite">
         {toasts.map((t) => (
           <div key={t.id} className={`toast ${t.type}`}>
             <span className="dot" />

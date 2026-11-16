@@ -1,4 +1,5 @@
 import type { FsNode } from "./types";
+import { newId } from "./types";
 
 export interface Located {
   container: FsNode[];
@@ -107,12 +108,56 @@ function replaceChildren(root: FsNode[], path: Located[], children: FsNode[]): F
     : root.map((n) => (n.id === path[0].node.id ? { ...n, children: replaceChildren(n.children, path.slice(1), children) } : n));
 }
 
+/** A new folder. It is marked as an explicit folder so renaming it to a dotted name keeps it one. */
 export function makeFolder(name: string): FsNode {
-  return { id: Math.random().toString(36).slice(2, 10), kind: "folder", name, children: [] };
+  return { id: newId(), kind: "folder", name, forceFolder: true, children: [] };
+}
+
+/** A new file (a node whose name contains a dot). */
+export function makeFile(name: string): FsNode {
+  return { id: newId(), kind: "folder", name, children: [] };
 }
 
 export function makeInsert(template: string): FsNode {
-  return { id: Math.random().toString(36).slice(2, 10), kind: "insert", name: template, children: [] };
+  return { id: newId(), kind: "insert", name: template, children: [] };
+}
+
+/** Insert a new node relative to an existing one (used when dropping a template onto the tree). */
+export function insertRelative(
+  root: FsNode[],
+  targetId: string,
+  position: "before" | "after" | "into",
+  node: FsNode,
+): FsNode[] {
+  const path = findPath(root, targetId);
+  if (!path) return [...root, node];
+  const target = path[path.length - 1];
+  if (position === "into") return insertChild(root, targetId, target.node.children.length, node);
+  const parent = path.length > 1 ? path[path.length - 2].node.id : null;
+  return insertChild(root, parent, target.index + (position === "after" ? 1 : 0), node);
+}
+
+/** A template name is a single token in .fh: no spaces, no leading # or @. */
+export function cleanTemplateName(raw: string): string {
+  return raw.trim().replace(/\s+/g, "_").replace(/^[#@]+/, "");
+}
+
+/** Nodes in a tree, not counting @insert lines. */
+export function countOwnNodes(nodes: FsNode[]): number {
+  return nodes.reduce((n, node) => n + (node.kind === "insert" ? 0 : 1) + countOwnNodes(node.children), 0);
+}
+
+/** Number of @insert references to each template across a list of trees. */
+export function countTemplateUses(trees: FsNode[][]): Record<string, number> {
+  const uses: Record<string, number> = {};
+  const walk = (nodes: FsNode[]) => {
+    for (const n of nodes) {
+      if (n.kind === "insert") uses[n.name] = (uses[n.name] ?? 0) + 1;
+      walk(n.children);
+    }
+  };
+  trees.forEach(walk);
+  return uses;
 }
 
 /** Rewrite every @insert reference from `oldName` to `newName`. */

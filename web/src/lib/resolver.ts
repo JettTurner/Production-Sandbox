@@ -1,5 +1,5 @@
 import type { FhDocument, FsNode, NodeKind } from "./types";
-import { newId } from "./types";
+import { isFileNode } from "./types";
 
 export interface ResolveResult {
   tree: FsNode[];
@@ -10,9 +10,17 @@ export function resolveDoc(doc: FhDocument): ResolveResult {
   return resolveTree(doc.root, doc.templates);
 }
 
+/**
+ * Expands every @insert in place (no wrapper folder).
+ *
+ * Resolved node ids are derived from the source node ids plus the chain of
+ * @insert nodes they were expanded through, so they are stable across edits
+ * (collapse state in the preview survives) and unique even when one template
+ * is inserted many times.
+ */
 export function resolveTree(root: FsNode[], templates: Record<string, FsNode[]>): ResolveResult {
   const errors: string[] = [];
-  const tree = resolveNodes(root, templates, [], errors);
+  const tree = resolveNodes(root, templates, [], errors, "", undefined);
   return { tree, errors };
 }
 
@@ -21,8 +29,10 @@ function resolveNodes(
   templates: Record<string, FsNode[]>,
   stack: string[],
   errors: string[],
+  prefix: string,
+  from: string | undefined,
 ): FsNode[] {
-  return nodes.flatMap((n) => resolveNode(n, templates, stack, errors));
+  return nodes.flatMap((n) => resolveNode(n, templates, stack, errors, prefix, from));
 }
 
 function resolveNode(
@@ -30,34 +40,38 @@ function resolveNode(
   templates: Record<string, FsNode[]>,
   stack: string[],
   errors: string[],
+  prefix: string,
+  from: string | undefined,
 ): FsNode[] {
+  const id = prefix + node.id;
   if (node.kind === "insert") {
     const key = node.name;
     if (stack.includes(key)) {
       errors.push(`Circular @insert detected: ${[...stack, key].join(" -> ")}`);
-      return [{ id: newId(), kind: "insert", name: key, children: [] }];
+      return [{ id, kind: "insert", name: key, children: [] }];
     }
     const template = templates[key];
     if (!template) {
       errors.push(`Template not found: "${key}"`);
-      return [{ id: newId(), kind: "insert", name: key, children: [] }];
+      return [{ id, kind: "insert", name: key, children: [] }];
     }
     // Deposit the template's contents in place — no wrapper folder.
-    return resolveNodes(template, templates, [...stack, key], errors);
+    return resolveNodes(template, templates, [...stack, key], errors, `${id}>`, key);
   }
 
-  return [
-    {
-      id: newId(),
-      kind: "folder",
-      name: node.name,
-      label: node.label,
-      children: resolveNodes(node.children, templates, stack, errors),
-    },
-  ];
+  const out: FsNode = {
+    id,
+    kind: "folder",
+    name: node.name,
+    children: resolveNodes(node.children, templates, stack, errors, prefix, from),
+  };
+  if (node.label) out.label = node.label;
+  if (node.forceFolder) out.forceFolder = true;
+  if (from) out.from = from;
+  return [out];
 }
 
-/** Stats used by the preview header. */
+/** Stats used by the output panel. */
 export interface TreeStats {
   folders: number;
   files: number;
@@ -80,9 +94,11 @@ export function countNodes(tree: FsNode[]): TreeStats {
     const next: FsNode[] = [];
     for (const n of queue) {
       if (n.kind === "insert") continue;
-      if (n.name.includes(".")) files++;
-      else folders++;
-      next.push(...n.children);
+      if (isFileNode(n)) files++;
+      else {
+        folders++;
+        next.push(...n.children);
+      }
     }
     queue = next;
   }
@@ -96,22 +112,6 @@ export function treeToText(tree: FsNode[], indent = 0): string[] {
     if (node.children.length) lines.push(...treeToText(node.children, indent + 1));
   }
   return lines;
-}
-
-export function computeMaxDepth(tree: FsNode[]): number {
-  const depth = (node: FsNode): number => {
-    if (!node.children.length) return 0;
-    return 1 + Math.max(...node.children.map(depth));
-  };
-  return tree.reduce((m, n) => Math.max(m, depth(n)), 0);
-}
-
-export type GradientColor = [number, number, number];
-export function gradientColor(start: GradientColor, end: GradientColor, t: number): string {
-  const r = Math.round(start[0] * (1 - t) + end[0] * t);
-  const g = Math.round(start[1] * (1 - t) + end[1] * t);
-  const b = Math.round(start[2] * (1 - t) + end[2] * t);
-  return `rgb(${r},${g},${b})`;
 }
 
 export type { FsNode, NodeKind };

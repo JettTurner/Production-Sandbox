@@ -142,3 +142,84 @@ export const BrandMarkIcon = ({ className }: { className?: string }) => (
     <path fill="#151a20" fillRule="evenodd" d="m264.58 249.28c-2.97 0.71-9.11 3.16-13.66 5.44-4.55 2.28-11.51 7.03-15.46 10.56-3.96 3.53-9.23 10.24-11.73 14.91-2.49 4.67-5.57 12.05-6.84 16.4-1.27 4.35-2.31 11.47-2.3 15.82 0 4.35 1.02 11.79 2.25 16.54 1.24 4.74 4.09 11.86 6.33 15.81 2.25 3.96 7.22 10.32 11.06 14.13 3.96 3.94 11.62 9.23 17.69 12.23 10.38 5.12 11.19 5.28 26.6 5.28 15.5 0 16.18-0.14 27.4-5.54 7.76-3.75 13.84-7.98 18.69-13.03 3.96-4.11 8.76-10.68 10.68-14.59 1.92-3.91 4.34-10.34 5.38-14.29 1.03-3.96 1.88-11.72 1.87-17.26-0.01-6.76-1.09-13.14-3.29-19.41-1.8-5.14-5.29-12.26-7.74-15.82-2.46-3.56-6.63-8.5-9.27-10.97-2.65-2.48-7.57-6.2-10.93-8.27-3.36-2.07-9.99-5.06-14.74-6.64-5.29-1.77-12.1-2.82-17.61-2.74-4.94 0.08-11.42 0.73-14.38 1.44z" />
   </svg>
 );
+
+// ---- Stroke icons added with the three-pane redesign ----
+function Stroke({ size = 14, className, children }: IconProps & { children: ReactNode }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
+}
+
+export const UndoIcon = (p: IconProps) => (
+  <Stroke {...p}>
+    <path d="M5 3 2 6l3 3M2 6h7.5a3.5 3.5 0 0 1 0 7H7" />
+  </Stroke>
+);
+
+export const RedoIcon = (p: IconProps) => (
+  <Stroke {...p}>
+    <path d="m11 3 3 3-3 3M14 6H6.5a3.5 3.5 0 0 0 0 7H9" />
+  </Stroke>
+);
+
+export const SearchIcon = (p: IconProps) => (
+  <Stroke {...p}>
+    <circle cx="7" cy="7" r="4" />
+    <path d="m10 10 3.5 3.5" />
+  </Stroke>
+);
+
+export const CheckIcon = (p: IconProps) => (
+  <Stroke {...p}>
+    <path d="m3 8.5 3.2 3L13 4.5" />
+  </Stroke>
+);
+
+export const WarningIcon = (p: IconProps) => (
+  <Stroke {...p}>
+    <path d="M8 2.5 14.5 13.5h-13zM8 6.5v3.2M8 11.6v.01" />
+  </Stroke>
+);
+
+export const DotsIcon = (p: IconProps) => (
+  <Stroke {...p}>
+    <path d="M3.5 8v.01M8 8v.01M12.5 8v.01" strokeWidth="2.4" />
+  </Stroke>
+);
+
+export const TreeIcon = (p: IconProps) => (
+  <Stroke {...p}>
+    <path d="M3 3v9.5h4M3 7h4" />
+    <rect x="8.5" y="5" width="5" height="4" rx="1" />
+    <rect x="8.5" y="10.5" width="5" height="4" rx="1" />
+  </Stroke>
+);
+
+export const TemplatesIcon = (p: IconProps) => (
+  <Stroke {...p}>
+    <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" />
+    <rect x="9" y="2.5" width="4.5" height="4.5" rx="1" />
+    <rect x="2.5" y="9" width="4.5" height="4.5" rx="1" />
+    <path d="M11.25 9v4.5M9 11.25h4.5" />
+  </Stroke>
+);
+
+export const OutputIcon = (p: IconProps) => (
+  <Stroke {...p}>
+    <path d="M2.5 4h11M2.5 8h7M2.5 12h4" />
+    <path d="m10.5 11.5 1.5 1.5 2.5-3" />
+  </Stroke>
+);

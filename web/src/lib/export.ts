@@ -1,14 +1,15 @@
 import JSZip from "jszip";
 import type { FsNode } from "./types";
+import { isFileNode } from "./types";
 
-/** Export the resolved tree as a .zip containing the empty folder structure. */
-export async function zipTree(tree: FsNode[], zipName: string): Promise<Blob> {
+/** Export a planned tree as a .zip containing the empty folder structure. */
+export async function zipTree(tree: FsNode[]): Promise<Blob> {
   const zip = new JSZip();
 
   function addNodes(folder: JSZip, nodes: FsNode[]) {
     for (const node of nodes) {
       if (node.kind === "insert") continue;
-      if (node.name.includes(".")) {
+      if (isFileNode(node)) {
         folder.file(node.name, "");
       } else {
         addNodes(folder.folder(node.name)!, node.children);
@@ -17,12 +18,7 @@ export async function zipTree(tree: FsNode[], zipName: string): Promise<Blob> {
   }
 
   addNodes(zip, tree);
-  const base = zipName.replace(/\.fh$/i, "");
-  return zip.generateAsync({ type: "blob", platform: "DOS" }).then((blob) => {
-    // JSZip already produced the blob; nothing to override
-    void base;
-    return blob;
-  });
+  return zip.generateAsync({ type: "blob", platform: "DOS" });
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {
@@ -39,23 +35,56 @@ export function downloadText(text: string, filename: string): void {
   downloadBlob(blob, filename);
 }
 
-export function supportsSaveFilePicker(): boolean {
-  return typeof window !== "undefined" && "showSaveFilePicker" in window;
+// ---------- .fh files via the File System Access API ----------
+// Keeping the FileSystemFileHandle lets Ctrl+S write straight back to the file
+// that was opened instead of prompting every time.
+
+const FH_TYPES = [{ description: "Folder Hierarchy", accept: { "text/plain": [".fh", ".pbkstruct", ".txt"] } }];
+
+export function supportsFilePickers(): boolean {
+  return typeof window !== "undefined" && "showOpenFilePicker" in window && "showSaveFilePicker" in window;
 }
 
-export async function saveFileAs(text: string, filename: string): Promise<boolean> {
-  if (!supportsSaveFilePicker()) return false;
+function isAbort(err: unknown): boolean {
+  return (err as { name?: string } | null)?.name === "AbortError";
+}
+
+export interface OpenedFile {
+  name: string;
+  text: string;
+  handle: FileSystemFileHandle | null;
+}
+
+/** Returns null when the user cancels. Requires supportsFilePickers(). */
+export async function pickAndOpenFile(): Promise<OpenedFile | null> {
+  try {
+    const [handle] = await window.showOpenFilePicker!({ id: "fh-file", types: FH_TYPES });
+    const file = await handle.getFile();
+    return { name: file.name, text: await file.text(), handle };
+  } catch (err) {
+    if (isAbort(err)) return null;
+    throw err;
+  }
+}
+
+export async function writeToHandle(handle: FileSystemFileHandle, text: string): Promise<void> {
+  const writable = await handle.createWritable();
+  await writable.write(text);
+  await writable.close();
+}
+
+/** Save-as dialog. Returns the new handle, or null when the user cancels. */
+export async function pickAndSaveFile(text: string, suggestedName: string): Promise<FileSystemFileHandle | null> {
   try {
     const handle = await window.showSaveFilePicker!({
-      suggestedName: filename,
+      id: "fh-file",
+      suggestedName,
       types: [{ description: "Folder Hierarchy", accept: { "text/plain": [".fh"] } }],
     });
-    const writable = await handle.createWritable();
-    await writable.write(text);
-    await writable.close();
-    return true;
+    await writeToHandle(handle, text);
+    return handle;
   } catch (err) {
-    if ((err as Error).name === "AbortError") return false;
+    if (isAbort(err)) return null;
     throw err;
   }
 }

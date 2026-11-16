@@ -225,7 +225,7 @@ export default function CodePane({ source, onChange }: CodePaneProps) {
           />
         </div>
       </div>
-      {!source.trim() && <div className="code-empty">Start typing… or design visually in the middle pane.</div>}
+      {!source.trim() && <div className="code-empty">Start typing, or switch to Tree to build it visually.</div>}
     </div>
   );
 }

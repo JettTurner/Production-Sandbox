@@ -1,7 +1,8 @@
 import type { FhDocument, FsNode, NodeKind, ParseIssue, ParseResult } from "./types";
-import { newId } from "./types";
+import { isFileLike, newId } from "./types";
 
 interface RawLine {
+  comment?: boolean;
   text: string;
   trimmed: string;
   leadingTabs: number;
@@ -20,6 +21,8 @@ interface Item {
   kind: NodeKind;
   name: string;
   label?: string;
+  forceFolder?: boolean;
+  comments?: string[];
   lineNo: number;
 }
 
@@ -33,8 +36,11 @@ export function parseFh(source: string): ParseResult {
   const lines: RawLine[] = [];
   rawLines.forEach((text, i) => {
     if (!text.trim()) return;
-    if (COMMENT_RE.test(text)) return;
     const trimmed = text.trim();
+    if (COMMENT_RE.test(text)) {
+      lines.push({ comment: true, text, trimmed, leadingTabs: 0, leadingSpaces: 0, lineNo: i + 1 });
+      return;
+    }
     const leadingTabs = (text.match(/^\t*/)?.[0].length ?? 0);
     const leadingSpaces = (text.match(/^ */)?.[0].length ?? 0);
     lines.push({ text, trimmed, leadingTabs, leadingSpaces, lineNo: i + 1 });
@@ -42,7 +48,7 @@ export function parseFh(source: string): ParseResult {
 
   // --- 2. Detect indentation unit (spaces-per-level) ---
   const spaceIndents = lines
-    .filter((l) => l.leadingSpaces > 0 && l.leadingTabs === 0)
+    .filter((l) => !l.comment && l.leadingSpaces > 0 && l.leadingTabs === 0)
     .map((l) => l.leadingSpaces);
   let unit = 0;
   if (spaceIndents.length) {
@@ -63,9 +69,25 @@ export function parseFh(source: string): ParseResult {
   let docName = "";
   let sawRoot = false;
   const templateColors: Record<string, string> = {};
+  // Comment lines are held here until the next meaningful line claims them, so
+  // they travel with whatever they sit above (see serializer.ts).
+  let pending: string[] = [];
+  const take = (): string[] => {
+    const out = pending;
+    pending = [];
+    return out;
+  };
+  const headerComments: string[] = [];
+  let rootComments: string[] = [];
+  const templateComments: Record<string, string[]> = {};
 
   for (const l of lines) {
     const t = l.trimmed;
+
+    if (l.comment) {
+      pending.push(t);
+      continue;
+    }
 
     if (/^@root\b/.test(t)) {
       const colorTok = t.replace(/^@root\b/, "").trim();
@@ -73,6 +95,7 @@ export function parseFh(source: string): ParseResult {
         current = rootSection;
         rootSection.items = []; // a later @root resets the root (matches legacy)
         sawRoot = true;
+        rootComments = take();
         if (colorTok) templateColors["@root"] = colorTok;
         continue;
       }
@@ -109,6 +132,8 @@ export function parseFh(source: string): ParseResult {
         continue;
       }
       if (color) templateColors[name] = color;
+      const comments = take();
+      if (comments.length) templateComments[name] = comments;
       const section: Section = { kind: "template", templateName: name, items: [] };
       templates.set(name, section);
       current = section;
@@ -116,10 +141,12 @@ export function parseFh(source: string): ParseResult {
     }
     if (t.startsWith("@version")) {
       version = t.split(/\s+/)[1] ?? version;
+      headerComments.push(...take());
       continue;
     }
     if (t.startsWith("@name")) {
-      docName = t.replace(/^@name\s+/, "").trim();
+      docName = t.replace(/^@name\b/, "").trim();
+      headerComments.push(...take());
       continue;
     }
     if (t.startsWith("@insert")) {
@@ -132,7 +159,14 @@ export function parseFh(source: string): ParseResult {
         issues.push({ line: l.lineNo, severity: "error", message: "@insert requires a template name." });
         continue;
       }
-      current.items.push({ indent: levelOf(l), kind: "insert", name, lineNo: l.lineNo });
+      const comments = take();
+      current.items.push({
+        indent: levelOf(l),
+        kind: "insert",
+        name,
+        lineNo: l.lineNo,
+        ...(comments.length ? { comments } : {}),
+      });
       continue;
     }
     if (t.startsWith("@")) {
@@ -146,8 +180,22 @@ export function parseFh(source: string): ParseResult {
       continue;
     }
     const parsed = parseNodeLine(t);
-    current.items.push({ indent: levelOf(l), kind: "folder", name: parsed.name, label: parsed.label, lineNo: l.lineNo });
+    if (!parsed.name) {
+      issues.push({ line: l.lineNo, severity: "warning", message: "A line with no name was ignored." });
+      continue;
+    }
+    const comments = take();
+    current.items.push({
+      indent: levelOf(l),
+      kind: "folder",
+      name: parsed.name,
+      label: parsed.label,
+      lineNo: l.lineNo,
+      ...(parsed.forceFolder ? { forceFolder: true } : {}),
+      ...(comments.length ? { comments } : {}),
+    });
   }
+  const trailingComments = take();
 
   // --- 4. Build trees ---
   const root = buildTree(rootSection.items, issues, "root");
@@ -168,6 +216,10 @@ export function parseFh(source: string): ParseResult {
     templates: templateTrees,
     templateOrder,
     templateColors,
+    headerComments,
+    rootComments,
+    templateComments,
+    trailingComments,
   };
 
   return { doc, issues };
@@ -175,7 +227,7 @@ export function parseFh(source: string): ParseResult {
 
 function buildTree(items: Item[], issues: ParseIssue[], sectionLabel: string): FsNode[] {
   const root: FsNode[] = [];
-  const stack: { children: FsNode[]; level: number }[] = [];
+  const stack: { node: FsNode; level: number }[] = [];
   for (const item of items) {
     while (stack.length && item.indent <= stack[stack.length - 1].level) stack.pop();
     if (stack.length && item.indent - stack[stack.length - 1].level > 1) {
@@ -192,17 +244,35 @@ function buildTree(items: Item[], issues: ParseIssue[], sectionLabel: string): F
       label: item.label,
       children: [],
     };
-    const parent = stack.length ? stack[stack.length - 1].children : root;
+    if (item.forceFolder) node.forceFolder = true;
+    if (item.comments) node.comments = item.comments;
+    const top = stack.length ? stack[stack.length - 1] : null;
+    if (top?.node.kind === "insert") {
+      issues.push({
+        line: item.lineNo,
+        severity: "warning",
+        message: `"${item.name}" is indented under an @insert; its contents come from the template, so this line is never created.`,
+      });
+    }
+    // Something with children is a folder, even when its name has a dot.
+    if (top && top.node.kind === "folder" && isFileLike(top.node.name)) top.node.forceFolder = true;
+    const parent = top ? top.node.children : root;
     parent.push(node);
-    stack.push({ children: node.children, level: item.indent });
+    stack.push({ node, level: item.indent });
   }
   return root;
 }
 
-function parseNodeLine(text: string): { name: string; label?: string } {
+function parseNodeLine(text: string): { name: string; label?: string; forceFolder?: boolean } {
   const m = text.match(/^(.*?)\s+"([^"]*)"\s*$/);
-  if (m) return { name: m[1].trim(), label: m[2] };
-  return { name: text.trim() };
+  let name = (m ? m[1] : text).trim();
+  // A trailing slash marks an explicit folder: `v1.2/` is a folder named "v1.2".
+  let forceFolder = false;
+  if (/[\\/]$/.test(name) && name.replace(/[\\/]+$/, "").trim()) {
+    name = name.replace(/[\\/]+$/, "").trim();
+    forceFolder = true;
+  }
+  return { name, ...(m ? { label: m[2] } : {}), ...(forceFolder ? { forceFolder } : {}) };
 }
 
 function gcd(a: number, b: number): number {
