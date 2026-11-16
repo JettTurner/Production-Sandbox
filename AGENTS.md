@@ -13,8 +13,9 @@ change.
 ## Project in one line
 
 Folder Hierarchy Studio (`web/`) — React + TypeScript + Vite app that visually
-edits, resolves, previews, and exports `.fh` folder-hierarchy files (successor
-to the legacy Python `.pbkstruct` tool kept at the repo root for reference).
+edits, resolves, validates, previews, and exports `.fh` folder-hierarchy files
+(successor to the legacy Python `.pbkstruct` tool kept at the repo root for
+reference).
 
 ## Commands (run inside `web/`)
 
@@ -22,16 +23,28 @@ to the legacy Python `.pbkstruct` tool kept at the repo root for reference).
 npm run dev        # dev server :5173
 npm run build      # tsc -b && vite build
 npm run typecheck  # tsc -b --noEmit
-npm run verify     # parser/resolver/treeEdit regression suite
+npm run verify     # regression suite (parser, resolver, validation, ids, treeEdit, disk writes)
 ```
 
 After code changes: run `npm run typecheck`, `npm run build`, and
-`npm run verify`; all three must pass.
+`npm run verify`; all three must pass. Add a check to `scripts/verify.ts` for
+any engine behaviour you change.
 
 ## Key rules
 
-- All source-text mutations go through `applySource` in `App.tsx`
-  (undo/redo integrity).
-- Designer edits must produce new trees via `lib/treeEdit.ts`.
-- A name containing a dot (`.`) is a file; everything else is a folder.
-- Node `id`s are ephemeral — regenerated on parse, never serialized.
+- The `.fh` source string is the single source of truth. It changes only
+  through `applySource` (text edits) or `commitDoc` (designer edits) in
+  `hooks/useFhDocument.ts` — never set it any other way (undo/redo integrity).
+- Designer edits must produce new trees via `lib/treeEdit.ts` (no mutation).
+- Comments are part of the document model. Anything that builds or copies an
+  `FhDocument` must carry `headerComments`, `rootComments`,
+  `templateComments`, `trailingComments` and each node's `comments`.
+- File vs folder is decided by `isFileNode(node)` (`lib/types.ts`), never by
+  testing the name directly: a dotted name is a file unless `forceFolder` is
+  set (written as a trailing `/`).
+- Node `id`s are never serialized, but they are stable: `lib/ids.ts` carries
+  them across re-parses. Give new nodes an id with `newId()` and re-id copies
+  with `cloneWithNewIds`.
+- Anything written to disk or zipped must be the planned tree from
+  `planTree()` (`lib/validate.ts`), and creation must never overwrite or
+  delete (`lib/folders.ts`).

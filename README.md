@@ -1,9 +1,9 @@
-# Folder Heirarchy Studio
+# Folder Hierarchy Studio
 
-**Version:** 1.0 (web) · **Author:** Jett Turner
-**Purpose:** Design, preview, and generate folder hierarchies from a simple text definition — now as a modern **webapp**.
+**Version:** 0.2.0 · **Author:** Jett Turner
+**Purpose:** Design, check, and generate folder hierarchies from a simple text definition (`.fh`).
 
-Previously a Tkinter desktop tool, this project is now a **pure client-side web app** (React + TypeScript + Vite). The definition format has been renamed from `.pbkstruct` to **`.fh`** (folder hierarchy). Files written in the old `.pbkstruct` syntax still load fine.
+A client-side web app (React + TypeScript + Vite) that also ships as a Windows desktop app (Electron). Nothing is uploaded anywhere; everything runs on your machine. Files written in the legacy `.pbkstruct` syntax still load.
 
 ---
 
@@ -15,37 +15,47 @@ npm install
 npm run dev
 ```
 
-Open the printed URL (default `http://localhost:5173`). Everything runs in your browser — no server required.
+Open the printed URL (default `http://localhost:5173`).
 
 ```bash
-npm run build   # production build -> web/dist/
-npm run verify  # parser/resolver sanity checks against the sample .fh files
+npm run build      # production build -> web/dist/
+npm run verify     # regression suite: parser, resolver, validation, tree edits, disk writes
 npm run typecheck
 ```
 
 ---
 
-## Features
+## The workspace
+
+Three panes, always visible on a desktop:
+
+| Pane | What it is for |
+| --- | --- |
+| **Structure** (left) | Root plus every template, with how many times each is inserted. Click one to edit it; drag a template onto a folder to insert it there. |
+| **Editor** (centre) | The selected section as a **Tree** (drag and drop, rename, add, duplicate, delete) or the whole file as **Source** text. Both stay in sync. |
+| **Output** (right) | Exactly what will be created: counts, pre-flight checks, the resolved preview, and the actions that create it. |
+
+On a phone the three panes sit behind bottom tabs (Structure · Templates · Output).
+
+### Features
 
 | Feature | How |
 | --- | --- |
-| **Visual designer** | Build the tree with buttons + drag & drop: add folders, insert templates, reorder, duplicate, rename (double-click). Edit `@root` or any template via section tabs. |
-| **Live code editor** | The `.fh` source pane is two-way synced with the designer — edit text and see the tree update, and vice versa. Syntax highlighting + inline parse warnings/errors. |
-| **Resolved preview** | Fully expands every `@insert` with circular-reference detection and missing-template errors. Shows folders/files, depth-colored, collapsible. |
-| **Create on disk** | *Chrome/Edge only.* Uses the browser **File System Access API** (`showDirectoryPicker`) to create the real folder tree on your machine. Requires localhost or https. |
-| **Download as .zip** | Exports the resolved empty structure as a `.zip`. |
-| **Copy as text** | Copies the resolved structure as tab-indented text to the clipboard. |
-| **Templates panel** | Create, rename (double-click), and delete templates; see usage counts; references update automatically on rename/delete. |
-| **Drag & drop files** | Drop any `.fh` / `.pbkstruct` file anywhere on the page to open it. |
-| **Samples** | Load from bundled sample structures (VizLab production, office directory, project structure, recursion demo). |
-
-> Names containing a `.` (e.g. `README.md`) are treated as **files**; everything else is a **folder** (matches legacy behavior).
+| **Tree editor** | Row actions appear on the row you point at or select. Double-click or `F2` to rename, `Del` to delete, arrow keys to move around, `Alt+↑/↓` to reorder, drag to move. Double-click an `@insert` row to edit its template in place. |
+| **Source editor** | Syntax highlighting and inline parse warnings/errors. Comments you write are kept when you edit in the tree. |
+| **Pre-flight checks** | Names that Windows can't create (`< > : " / \ | ? *`, reserved names like `CON`, trailing dot or space), a name used as both file and folder, and paths that approach the 260-character limit are flagged before anything is written. Same-name siblings are merged, and the counts reflect what actually lands on disk. |
+| **Create folders** | *Chrome, Edge, or the desktop app.* Choose a destination, then review a dry run: what is new, what already exists (left untouched), and any conflicts. Create the whole structure or a single template, optionally wrapped in one new folder. Nothing is ever overwritten or deleted. |
+| **Download as .zip** | The same structure as an empty-folder zip; works in every browser. |
+| **Copy as text** | The resolved structure as tab-indented text. |
+| **Open / Save** | `Ctrl+O` opens, `Ctrl+S` saves straight back to the file you opened (it only asks where the first time), `Ctrl+Shift+S` saves a copy. Dropping a `.fh` file on the window opens it. Where the browser has no file pickers, Save downloads the file instead. |
+| **Undo / redo** | `Ctrl+Z` / `Ctrl+Y`, 100 steps. |
+| **Samples** | Under the `⋯` menu. |
 
 ---
 
 ## The `.fh` Format
 
-A `.fh` file defines a hierarchy with **tab indentation** (4-space indentation is also supported and auto-detected). Each tab = one level of nesting.
+A `.fh` file defines a hierarchy with **tab indentation** (space indentation is also supported and auto-detected). Each level of indentation is one level of nesting.
 
 ```fh
 @version 1.0
@@ -54,25 +64,22 @@ A `.fh` file defines a hierarchy with **tab indentation** (4-space indentation i
 #---Root---
 @root
 01_EXT
-    CA
-        ANH
-            @insert TESTCLIENTS
+	CA
+		ANH
+			@insert TESTCLIENTS
 
 #---Templates---
 @template TESTCLIENTS
-    CLIENT1
-        _Deliverables
-        @insert TESTPROJECTS
+	CLIENT1
+		_Deliverables
+		@insert PROJECT
 
-@template TESTPROJECTS
-    260000_VL_Client-Name_Project-Name_TX_SAN_VZLB_IN
-        @insert PROJECT
-
-@template PROJECT
-    00_ProgressImages
-    01_Deliverables
-    02_Links
-    03_ReferenceFiles
+# Every project gets these
+@template PROJECT #ffa657
+	00_ProgressImages
+	01_Deliverables
+	v1.2/
+	README.md
 ```
 
 ### Directives
@@ -81,30 +88,32 @@ A `.fh` file defines a hierarchy with **tab indentation** (4-space indentation i
 | --- | --- |
 | `@version 1.0` | Format version (informational) |
 | `@name <name>` | Document name (informational) |
-| `@root [#hex]` | Starts the top-level structure; optional GUI display color |
-| `@template <NAME> [#hex]` | Starts a reusable, named subtree; optional GUI display color |
-| `@insert <NAME>` | Expands a template in place |
+| `@root [#hex]` | Starts the top-level structure |
+| `@template <NAME> [#hex]` | Starts a reusable, named subtree; optional display color. Names are one word (no spaces). |
+| `@insert <NAME>` | Expands a template in place (its contents, with no wrapper folder) |
 
 ### Node syntax
 
 ```fh
-TX "Texas"     # folder "TX" with GUI-only label "Texas"
-README.md      # treated as a file (name contains a dot)
+TX "Texas"     # folder "TX" with a display-only label "Texas"
+README.md      # a file: the name contains a dot
+v1.2/          # a folder, even though the name contains a dot
 ```
 
-- **Comments** start with `#` and are ignored (whole line).
-- **Colors**: a trailing `#hex` on `@root` or `@template NAME` (e.g. `@template PROJECT #ffa657`) sets a GUI-only display color; it never reaches disk.
-- **Templates** may insert other templates. Nested inserts are fully supported.
-- **Circular inserts** (`A -> B -> A`) are detected and reported as errors.
-- **Missing templates** are reported as errors.
+- **Files vs folders.** A name containing a `.` is a **file**; everything else is a **folder**. End a name with `/` to make it a folder regardless (`v1.2/`). Anything that has children is a folder.
+- **Comments** are whole lines starting with `#`. They are kept, attached to whatever line follows them.
+- **Colors**: a trailing `#hex` on `@root` or `@template NAME` is display-only; it never reaches disk.
+- **Templates** may insert other templates. Circular inserts (`A -> B -> A`) and missing templates are reported as errors.
 
 ---
 
-## Deploying
+## Desktop app
 
-`npm run build` produces static files in `web/dist/` that you can host anywhere (GitHub Pages, Netlify, any static host). For full offline/folder-creation support it's best run on localhost or https.
+`build.bat` (repo root) builds the Windows installer: verify → build → icons → `electron-builder --dir` → Inno Setup. It needs Node.js and [Inno Setup 6](https://jrsoftware.org/isdl.php). See `docs/structure.md` for details.
 
-**Folder creation note:** `showDirectoryPicker()` is only available in Chromium-based browsers under a secure context. On other browsers, use **Download as .zip** instead.
+## Deploying the web app
+
+`npm run build` produces static files in `web/dist/` that can be hosted anywhere (the repo includes a `vercel.json`). "Create folders" needs a Chromium browser on localhost or https; other browsers get the zip.
 
 ---
 
@@ -113,11 +122,13 @@ README.md      # treated as a file (name contains a dot)
 ```
 web/
 ├── public/samples/          # sample .fh files (bundled)
-├── scripts/verify.ts        # parser sanity checks (npm run verify)
+├── scripts/verify.ts        # regression suite (npm run verify)
+├── electron/main.cjs        # desktop shell
 └── src/
-    ├── lib/                 # format engine (parser, serializer, resolver, export, fs access)
-    ├── components/          # CodePane, Designer, Preview, TemplatesPanel, icons
-    └── App.tsx              # layout + state + actions
+    ├── lib/                 # format engine: parser, serializer, resolver, validate, ids, treeEdit, export, folders
+    ├── hooks/               # useFhDocument: source text, parsed doc, undo/redo, saved state
+    ├── components/          # Sidebar, EditorPane, Designer, CodePane, OutputPane, Preview, CreateDialog, …
+    └── App.tsx              # shell: layout, file I/O, template operations
 ```
 
-The legacy desktop app lives on in `pbkstruct_gui.py` (kept for reference).
+`docs/structure.md` describes every file. The legacy desktop tool lives on in `pbkstruct_gui.py` (reference only).

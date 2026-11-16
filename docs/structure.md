@@ -8,9 +8,10 @@
 
 ## What this project is
 
-**Folder Hierarchy Studio** is a browser-based visual designer + generator for
-`.fh` ("folder hierarchy") files — a renamed evolution of the legacy `.pbkstruct`
-format parsed by the original Python/tkinter tool (`pbkstruct_gui.py`, kept for
+**Folder Hierarchy Studio** is a visual designer + generator for `.fh`
+("folder hierarchy") files, running in the browser and as a Windows desktop
+app (Electron). `.fh` is a renamed evolution of the legacy `.pbkstruct` format
+parsed by the original Python/tkinter tool (`pbkstruct_gui.py`, kept for
 reference).
 
 A `.fh` file describes a folder/file skeleton:
@@ -25,26 +26,48 @@ src
 	main.tsx
 	components
 		Button.tsx
+	v1.2/
 
-#---Templates---
+# Reusable pieces
 @template react-component #ffa657
-@index.tsx
+	index.tsx
 	styles.css
 ```
 
-- Indentation = nesting (tabs or 4 spaces).
+- Indentation = nesting (tabs or spaces).
 - A name containing a dot (`.`) is a **file**; anything else is a **folder**.
+  A trailing `/` forces a folder (`v1.2/`), and anything with children is a
+  folder. The single test for this is `isFileNode(node)` in `lib/types.ts`.
 - `NAME "Label"` attaches a GUI-only display label (never written to disk).
 - `@template X` sections define reusable structures; `@insert X` lines deposit a
   template's contents **in place** (no wrapper folder) at resolve time.
-- A trailing `#hex` on `@root` or `@template NAME` (e.g. `@template X #ffa657`)
-  assigns a GUI-only display color. The legacy separate-line `@template-color`
-  directive was removed and now produces a warning.
-- The app resolves `@insert`s into a final tree, previews it, and can export it
-  as a `.zip` or create it on disk (File System Access API).
+- A trailing `#hex` on `@root` or `@template NAME` assigns a GUI-only display
+  color. The legacy separate-line `@template-color` directive was removed and
+  now produces a warning.
+- Lines starting with `#` are comments. They are kept: each block of comment
+  lines is attached to the line that follows it.
 
-The single source of truth is the `.fh` source string; every designer edit
-re-serializes the document and re-parses it.
+### Data flow
+
+```
+.fh source text ──parseFh──▶ FhDocument ──resolveTree──▶ resolved tree
+      ▲                          │                            │
+      └────── serializeFh ◀──────┘ (designer edits)       planTree
+                                                               │
+                                              planned tree + issues ──▶ preview / zip / create on disk
+```
+
+The **source string is the single source of truth**. Text edits replace it
+directly; designer edits modify the parsed document, serialize it, and
+re-parse. Two things make that round trip safe:
+
+- **Comments are in the model**, so serializing never drops them.
+- **Node ids survive re-parsing** (`lib/ids.ts`), so collapse / expand /
+  selection state in the UI is not reset by an edit.
+
+Everything that leaves the app (preview, zip, folders on disk) comes from the
+**planned tree**: the resolved tree with same-name siblings merged and every
+name and path validated (`lib/validate.ts`).
 
 ---
 
@@ -56,232 +79,216 @@ re-serializes the document and re-parses it.
 ├── README.md                  ← user-facing readme
 ├── build.bat                  ← one-shot Electron build: verify → vite build →
 │                                electron-builder --dir → Inno Setup installer (.iss)
+├── vercel.json                ← static hosting config (builds web/, serves web/dist)
 ├── docs/
 │   └── structure.md           ← this document
 ├── pbkstruct_gui.py           ← LEGACY Python/tkinter tool (.pbkstruct era); reference only
 └── web/                       ← THE APP (React + TypeScript + Vite)
     ├── index.html             ← Vite entry HTML
-    ├── package.json           ← scripts & deps (see Commands below); also holds the
-    │                             electron-builder config ("build" field) and the Electron
-    │                             entry point ("main": electron/main.cjs)
+    ├── package.json           ← scripts & deps; also the electron-builder config
+    │                             ("build" field) and the Electron entry ("main")
     ├── vite.config.ts         ← Vite config (react plugin, port 5173, auto-open,
-    │                             base "./" so the built app works under Electron's app:// scheme)
-    ├── tsconfig.json          ← TS solution file (references app/node configs)
-    ├── tsconfig.app.json      ← TS config for src/
-    ├── tsconfig.node.json     ← TS config for vite.config.ts / scripts
-    ├── preview.log            ← scratch logs (not part of the app)
+    │                             base "./" so the build works under Electron's app:// scheme)
+    ├── tsconfig*.json         ← TS solution + app/node configs
     ├── electron/
     │   └── main.cjs           ← Electron main process: serves web/dist via a custom
-    │                             app:// protocol (fetch() doesn't work on file://); frameless
-    │                             window whose title bar IS the app header (titleBarStyle
-    │                             hidden + theme-colored titleBarOverlay); VITE_DEV_SERVER_URL
-    │                             env switches to the dev server
+    │                             app:// protocol; frameless window whose title bar IS
+    │                             the app header (TITLEBAR_* constants mirror the CSS)
     ├── installer/
-    │   └── folder-hierarchy-studio.iss  ← Inno Setup script consumed by build.bat;
-    │                             machine-wide install ({autopf}\ProductionSandbox\
-    │                             Folder Hierarchy Designer, requires elevation),
-    │                             version injected via /DMyAppVersion, packaging input via /DAppSourceDir,
-    │                             SetupIconFile from build/icon.ico
+    │   └── folder-hierarchy-studio.iss  ← Inno Setup script consumed by build.bat
     ├── build/
-    │   └── icon.ico           ← GENERATED (scripts/make-icon.mjs): multi-size ICO;
-    │                             auto-embedded into the exe by electron-builder
+    │   └── icon.ico           ← GENERATED (scripts/make-icon.mjs)
     ├── public/
     │   ├── Production-Sandbox_Icon.svg ← source of truth for all app icons
-    │   ├── Production-Sandbox_Icon.ai/.png ← raw design assets (also copied into dist)
-    │   ├── icon.png           ← GENERATED 256px PNG; BrowserWindow/taskbar icon via dist/
-    │   └── samples/           ← bundled example .fh files (Load-sample dropdown)
+    │   ├── Production-Sandbox_Icon.ai/.png ← raw design assets
+    │   ├── icon.png           ← GENERATED 256px PNG
+    │   └── samples/           ← bundled example .fh files (⋯ menu → Samples)
     │       ├── startup.fh     ← loaded automatically on app boot
     │       ├── vizlab.fh
     │       ├── example.fh
     │       ├── project-structure.fh
     │       └── office-directory.fh
     ├── scripts/
-    │   ├── verify.ts          ← headless parser/resolver/treeEdit regression suite
-    │   └── make-icon.mjs      ← Production-Sandbox_Icon.svg → build/icon.ico + public/icon.png (npm run icons)
+    │   ├── verify.ts          ← headless regression suite (npm run verify)
+    │   └── make-icon.mjs      ← icon SVG → build/icon.ico + public/icon.png (npm run icons)
     └── src/
-        ├── main.tsx           ← React bootstrap (mounts <App/> into #root)
-        ├── App.tsx            ← application shell: state hub, layout, toolbar
+        ├── main.tsx           ← React bootstrap (mounts <App/>; adds html.electron)
+        ├── App.tsx            ← application shell: layout, file I/O, template operations
         ├── index.css          ← ALL styling (single stylesheet, dark theme)
-        ├── vite-env.d.ts      ← Vite client types
-        ├── components/        ← UI building blocks (see below)
-        ├── lib/               ← pure logic: parse/serialize/resolve/edit/export
-        └── components/panes/  ← top-level column panes composed by App
+        ├── vite-env.d.ts      ← Vite client types + File System Access API typings
+        ├── hooks/             ← useFhDocument (document state)
+        ├── components/        ← UI (see below)
+        └── lib/               ← pure logic (see below)
 ```
 
 ---
 
 ## Source files — definitions
 
-### `web/src/App.tsx` — application shell & state hub
+### `web/src/App.tsx` — application shell
 
-Owns all shared state and wires the four column panes together.
+Composes the header, the three panes, the status bar, the mobile tab bar, the
+Create dialog and toasts. Owns UI state only: selected section (Root or a
+template), editor mode (Tree / Source), mobile tab, pane widths, the open
+file's name and `FileSystemFileHandle`.
 
-- **State**: raw `.fh` source string, parsed doc, filename, undo/redo history
-  (`pastRef`/`futureRef`, cap 30), dirty tracking (`baselineRef`),
-  leftmost-column visibility + active tab (`LeftTab`), per-column pixel widths,
-  active template selection, toast notifications.
-- **`applySource(next, discrete?)`**: the ONLY mutation path for source text.
-  Re-parses, updates history (typing coalesced within 800 ms unless
-  `discrete=true`; designer/file actions always discrete).
-- **Keyboard**: Ctrl+S save, Ctrl+O open, Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y
-  redo (skipped when focus is in INPUT/SELECT), beforeunload guard +
-  `confirmDiscard()` gates on new/open/sample.
-- **Layout**: header (filename input with fixed `.fh` chip, samples,
-  save/zip/copy/disk buttons) → a vertical `LeftRail` of tabs pinned to the
-  screen's left edge (desktop) that swaps in content in the leftmost column →
-  `<main>` with resizable columns:
-  leftmost column (driven by the rail: Root | Templates | Source) | Preview
-  pane. Root, Templates, and Source are all tabs in the rail (no modal, no
-  separate Root column) so the editor is always two columns. On mobile the
-  `.mobile-tabs` bar picks the same panels in the same order (Root | Templates |
-  Source | Preview); desktop rail and mobile bar both honor the 1/2/3 number-key
-  shortcuts. `ColumnResizer` sits between the two columns; Preview flex-fills to
-  the screen edge. The left column and Preview split the usable space 50/50.
-  The status bar's right side shows a rotating tip (`TIPS`) that cycles on a
-  timer.
-- Auto-selects the first template whenever the active template is missing.
+- **Derived output** (memoized): `resolveDoc(doc)` → `planTree(...)` →
+  `countNodes(plan.tree)`, plus `countTemplateUses` and display `colors`
+  (file colors, with palette fallbacks by position for templates that have
+  none; nothing is written until the user picks a color).
+- **File I/O**: `openFile` / `save` / `saveAs`. With the File System Access
+  API the handle from Open, Save-as or a drag-and-drop is kept, so `save`
+  writes straight back to it; without the API, Open uses a file input and Save
+  downloads. Save writes the source text exactly as shown in Source.
+- **Template operations**: add, rename, delete, recolor — each one `commitDoc`
+  call that also carries the template's comments and color.
+- **Keyboard**: Ctrl+S save, Ctrl+Shift+S save as, Ctrl+O open, Ctrl+Z undo,
+  Ctrl+Y / Ctrl+Shift+Z redo; `beforeunload` guard and `confirmDiscard()` on
+  new/open/sample.
+
+### `web/src/hooks/useFhDocument.ts` — document state
+
+The only place the source text changes.
+
+- `applySource(text, discrete?)` — text edits; typing within 800 ms coalesces
+  into one undo step.
+- `commitDoc(update)` — designer edits; always builds on the freshest parsed
+  document so several commits in one tick compose.
+- `undo` / `redo` (100 steps), `load(text)` (new document, clears history),
+  `markSaved()`, and `dirty`, `canUndo`, `canRedo`, `doc`, `issues`.
+- Parses once per change and runs `reconcileIds` against the previous
+  document so node ids stay stable.
 
 ### `web/src/lib/types.ts` — core data model
 
-- `FsNode` — `{ id, kind: "folder" | "insert", name, label?, children }`.
-  Files are folders whose name contains a dot. `id` is regenerated on every
-  parse (never persist it).
-- `FhDocument` — `{ version, name, root: FsNode[], templates, templateOrder, templateColors }`.
-  `templateColors` maps template names to hex display colors (GUI only).
-- `ParseIssue` / `ParseResult` — diagnostics with line numbers.
-- `isFileLike(name)` — dot test used everywhere for folder-vs-file.
-- `newId()` — random id generator.
+- `FsNode` — `{ id, kind: "folder" | "insert", name, label?, forceFolder?,
+  comments?, from?, children }`. Files are `folder`-kind nodes for which
+  `isFileNode` is true. `from` exists only on resolved nodes (the template
+  they came from).
+- `FhDocument` — `{ version, name, root, templates, templateOrder,
+  templateColors, headerComments, rootComments, templateComments,
+  trailingComments }`.
+- `isFileNode(node)` — THE folder-vs-file rule. `isFileLike(name)` is the
+  name-only dot test it builds on.
+- `ParseIssue` / `ParseResult`, `newId()`, `emptyDocument()`.
 
 ### `web/src/lib/parser.ts` — `.fh` text → `FhDocument`
 
-- Accepts tabs or 4-space indentation (mixed allowed); skips blank lines and
-  `#` comments; understands `@version`, `@name`, `@root [#hex]`, `@template X
-  [#hex]`, `@insert X`, trailing `"Label"` annotations.
-- Produces `ParseResult { doc, issues }` with line-numbered errors/warnings;
-  `doc` is null only when the file has no usable content.
+- Tabs or space indentation; skips blank lines; understands `@version`,
+  `@name`, `@root [#hex]`, `@template X [#hex]`, `@insert X`, trailing
+  `"Label"` annotations and the trailing-`/` folder marker.
+- Comment lines are buffered and attached to the next meaningful line (a
+  node, `@root`, `@template`, or the file header); leftovers become
+  `trailingComments`.
+- A dotted name that has children is marked `forceFolder`. Lines indented
+  under an `@insert` produce a warning (they are never created).
+- Returns `ParseResult { doc, issues }` with line-numbered errors/warnings.
 
 ### `web/src/lib/serializer.ts` — `FhDocument` → `.fh` text
 
-- `serializeFh(doc)` writes `@version`, `@name`, `#---Root---`/`@root [#hex]`,
-  then each `@template X [#hex]` in `templateOrder` order; tabs for indent;
-  labels quoted; trailing blank lines trimmed.
+- Writes header comments, `@version`, `@name`, then `@root` and each
+  `@template` (in `templateOrder`) with their comments above them. Root nodes
+  start at indent 0, template nodes at one tab. Node comments are written at
+  the node's indent. `name/` is written only for forced folders with a dotted
+  name. Serializing a parsed document is idempotent.
 
 ### `web/src/lib/resolver.ts` — resolves templates into the final tree
 
 - `resolveTree(root, templates)` → `{ tree, errors }`: expands every `@insert`
-  by splicing the template's contents **in place** (no wrapper folder);
-  detects circular inserts and missing templates as errors.
-- Also exports `countNodes` (preview stats: folders/files/total, plus `maxDepth`
-  and `maxWidth` — deepest level count and widest branching point),
-  `treeToText`, `computeMaxDepth`, `gradientColor` (depth-based name coloring).
+  in place; reports circular inserts and missing templates.
+- Resolved ids are `<chain of insert ids>` + `<source node id>`: stable across
+  edits and unique when a template is inserted many times.
+- `countNodes` (folders / files / total / maxDepth / maxWidth), `treeToText`.
 
-### `web/src/lib/treeEdit.ts` — immutable tree operations (designer edits)
+### `web/src/lib/validate.ts` — the planned tree and pre-flight checks
+
+- `planTree(resolved)` → `PlannedTree { tree, issues, errors, warnings,
+  duplicates, duplicateExamples, longestPath, longestPathText }`. Merges
+  same-name siblings case-insensitively (as Windows does), then checks every
+  name (`nameProblem`: illegal characters, reserved device names, trailing
+  dot/space), file-vs-folder clashes, and path length against `MAX_PATH`
+  (260; warning above `PATH_WARN`).
+- The output pane, zip export and Create dialog all use `plan.tree`, so the
+  counts shown are what actually lands on disk.
+
+### `web/src/lib/ids.ts` — stable node ids
+
+- `reconcileIds(next, prev)` — copies ids from the previous document onto a
+  freshly parsed one: same position + name, else same name among siblings,
+  else same position when the sibling count is unchanged (renames).
+- `cloneWithNewIds(node)` — deep copy with fresh ids (Duplicate).
+
+### `web/src/lib/treeEdit.ts` — immutable tree operations
 
 All return new trees; never mutate.
 
-- `cloneTree`, `updateNode(root, id, updater)` — rebuild full path to target.
-- `removeNode(root, id)`, `insertChild(root, parentId, index, node)`.
-- `moveNode(root, dragId, targetId, position)` — position ∈
-  `before | after | into`; "into" appends as last child of a folder;
-  self/descendant drops are no-ops. Covered by regression checks.
-- `renameTemplateInTree(nodes, old, new)` / `removeTemplateRefs(nodes, name)`
-  — rewrite or strip `@insert` references when templates are renamed/deleted.
+- `updateNode`, `removeNode`, `insertChild`, `insertRelative` (before / after /
+  into an existing node), `moveNode` (drag & drop; self/descendant drops are
+  no-ops), `cloneTree`.
+- `makeFolder` (marked `forceFolder` so a later dotted rename stays a
+  folder), `makeFile`, `makeInsert`.
+- `renameTemplateInTree`, `removeTemplateRefs`, `countTemplateUses`.
 
-### `web/src/lib/export.ts` — output helpers
+### `web/src/lib/export.ts` — files in and out
 
-- `zipTree(tree, zipName)` — resolved tree → JSZip blob of empty
-  folders/files (JSZip dependency).
-- `downloadBlob` / `downloadText` — anchor-download helpers.
-- `copyText` — clipboard copy with `execCommand` fallback.
+- `zipTree(tree)` — planned tree → JSZip blob of empty folders/files.
+- `pickAndOpenFile`, `pickAndSaveFile`, `writeToHandle`,
+  `supportsFilePickers` — `.fh` files via the File System Access API.
+- `downloadBlob` / `downloadText`, `copyText` — fallbacks and clipboard.
 
 ### `web/src/lib/folders.ts` — write to real disk
 
-- `createOnDisk(tree, picker)` — File System Access API
-  (`showDirectoryPicker`); creates empty files for dot-names, directories
-  otherwise. Chrome/Edge only.
-- `supportsFsAccess()` — feature detection.
+- `scanDestination(dir, tree)` — dry run: every entry is `new`, `exists` or
+  `conflict` (a file where a folder should be, or the reverse). Changes
+  nothing.
+- `createOnDisk(dir, tree, onProgress)` — creates what is missing. Existing
+  folders are reused; existing files are never opened for writing. Stops at
+  the first failure and reports the path and what was created.
+- `supportsFsAccess()` — feature detection (Chromium + Electron).
 
-### `web/src/components/Designer.tsx` — interactive tree editor (shared)
+### Components (`web/src/components/`)
 
-Used by both the Root Designer and the Templates pane.
+| File | Role |
+| --- | --- |
+| `Sidebar.tsx` | Left pane. Root plus the template list: color dot, name, `N×` use count (or "unused"), filter (7+ templates), new-template input. Template rows are drag sources (`TEMPLATE_MIME`). |
+| `EditorPane.tsx` | Centre pane. Header (section title; for a template: color, rename, delete) + Tree/Source toggle. Tree mode renders `Designer` for the selected section; Source mode renders `CodePane` for the whole file plus the issue list. Owns collapsed-folder and expanded-insert state so it survives switching sections. |
+| `Designer.tsx` | The tree editor (shared by Root, templates and inline-expanded inserts). Row = chevron, drag grip, icon, name, child count, actions. Actions show on hover/selection only. Selection + keyboard (arrows, Enter/F2, Del, Alt+↑/↓). Drag & drop to move; accepts sidebar templates. Inline rename validates names and never turns a folder into a file. `PlusDropdown` adds a folder, file, or template insert. |
+| `CodePane.tsx` | Contenteditable source editor with syntax highlighting, line numbers, Tab / Shift+Tab indent, auto-indent on Enter. |
+| `OutputPane.tsx` | Right pane. Stats, pre-flight checks (`CheckLine`), `Preview`, and the actions. Where the browser can't write folders, the zip is the primary action. |
+| `Preview.tsx` | Read-only planned tree. Collapsible, optional A–Z sort, a dot marks nodes that came from a template (in that template's color). |
+| `CreateDialog.tsx` | The review step before writing: destination picker, scope (whole structure or one template), optional wrapper folder, live dry run via `scanDestination`, then `createOnDisk` with progress and a result line. |
+| `ColorPicker.tsx` | Swatch + custom color popover. |
+| `ColumnResizer.tsx` | Drag handle between panes (reports pixel deltas). |
+| `icons.tsx` | Inline SVG icons (filled set + a stroke set) and the `BrandMarkIcon`. |
 
-- Recursive rows: chevron, drag handle, type icon, name zone (name + child
-  count), always-visible control column pinned right, colored by node type
-  (blue folder / green file / purple insert; delete neutral→red on hover).
-- Controls: add sibling (`+`), add child (plus-under-line icon; disabled on
-  `@insert` rows), move up/down, duplicate, delete, expand/collapse template
-  (for `@insert` nodes when `onToggleInsert` is provided).
-- Drag & drop with before/after/into drop zones (delegates to
-  `treeEdit.moveNode`); controls hidden while dragging.
-- Double-click name to rename inline (Enter commits, Escape cancels).
-- `PlusDropdown` portal menu: Add Folder / File / Insert structure (lists
-  templates). `AddSpec` describes what to insert where.
-- New nodes enter rename mode automatically.
-- **Inline template expansion**: when `templateMap`, `expandedInserts`, and
-  `onToggleInsert` are provided, double-clicking an `@insert` row expands its
-  template contents inline with purple styling. Template edits call
-  `onTemplateNodesChange(templateName, newNodes)`. Insert rows are colored by
-  their template's color from `templateColors`.
+### Layout & styling (`web/src/index.css`)
 
-### `web/src/components/Preview.tsx` — resolved-tree viewer
-
-- Renders the fully resolved tree (what gets written to disk): one line per
-  node, no wrapping/clipping — wide trees scroll horizontally.
-- Fixed 20px-per-level indent applied to the row itself.
-- Depth-gradient name colors; collapsible folders; Expand/Collapse all;
-  count badge on folders; error banner replaces the tree when unresolved.
-
-### `web/src/components/CodePane.tsx` — raw source editor
-
-- Textarea over a syntax-highlight backdrop (directives, labels, comments,
-  insert/template names, `#hex` colors), line-number gutter synced to scroll.
-- Tab inserts tab (Shift+Tab outdents, multi-line aware); Enter auto-indents.
-
-### `web/src/components/SectionPicker.tsx` — templates pane header tools
-
-- Template chooser dropdown, rename (pencil) / delete (×) for the active
-  template, "+ Template" inline creator input. Rendered at the top of the
-  `TemplatesPane` (the Templates tab of the leftmost column).
-
-### `web/src/components/ColumnResizer.tsx` — drag handle between columns
-
-- Mouse-drag divider; reports per-move pixel deltas via `onResize(dx)`.
-
-### `web/src/components/LeftRail.tsx` — vertical tab rail
-
-- Generic, data-driven vertical tab strip pinned to the desktop's left edge
-  (activity-bar style): a stack of icon + vertical-label tabs, one per leftmost
-  column pane. Clicking the active tab collapses the column, clicking another
-  swaps its content. Pane definitions come from `App` via the `tabs`/`active`/
-  `onToggle` props; new panels are added by appending to the tab list.
-
-### `web/src/components/icons.tsx` — inline SVG icon set
-
-Folder, File, Chevron, Grip, Plus, PlusChild (line + plus underneath),
-X, Copy, Download, Upload, FolderArrow, Sparkle, Eraser, Pencil, Code, Menu.
-
-### `web/src/components/panes/` — top-level columns
-
-| Pane | Wraps | Notes |
-|---|---|---|
-| `RootDesignerPane.tsx` | name input + color + Designer | single consolidated header (name `@name` + `@root` color) + root tree; the Root tab of the leftmost column |
-| `SourcePane.tsx` | CodePane + issue list | the Source tab of the leftmost column |
-| `TemplatesPane.tsx` | SectionPicker + Designer | the Templates tab of the leftmost column |
-| `PreviewPane.tsx` | stats header + Preview | folders/files/total counts; the right, flex-fill column |
-
-The leftmost column is the root/source/templates editor selected by the active
-`LeftRail` tab; each pane keeps its own default header. All pane components
-accept an optional `style` prop (flex sizing from App).
+- Desktop: header / `.workspace` (sidebar · editor · output, resizable) /
+  status bar.
+- ≤ 860px: one pane at a time, chosen by `.app[data-tab]`, with a bottom tab
+  bar; rows grow to touch size and the selected row's actions move onto their
+  own line.
+- Colors are CSS variables at the top of the file.
 
 ---
 
 ## Tests & verification
 
-- `web/scripts/verify.ts` — headless suite run by `npm run verify`
-  (via tsx). Covers: parsing (tabs/spaces, labels, directives), resolution
-  (in-place splice, circular detection, missing templates), round-trip
-  serialize→parse stability, and `treeEdit` mutations including six
-  `moveNode` regression cases. Prints `ALL CHECKS PASSED` on success.
+`web/scripts/verify.ts`, run by `npm run verify` (tsx, no test framework).
+Covers:
+
+- every bundled sample: parses, resolves, round-trips, keeps its comments,
+  serializes idempotently;
+- parsing (indentation, labels, colors, legacy directives), resolution
+  (in-place splice, circular / missing templates);
+- comments surviving designer edits; the folder marker; validation (illegal
+  and reserved names, duplicate merging, file/folder clashes, path length);
+- id stability across re-parses and resolves; `treeEdit` operations including
+  the `moveNode` regression cases;
+- the dry run and create against an in-memory folder: nothing written during
+  a scan, existing files untouched, conflicts reported, stop-on-failure.
+
+Prints `ALL CHECKS PASSED` on success.
 
 ## Commands (run inside `web/`)
 
@@ -290,7 +297,7 @@ npm run dev               # Vite dev server on :5173 (auto-opens)
 npm run build             # tsc -b && vite build
 npm run preview           # serve the production build
 npm run typecheck         # tsc -b --noEmit
-npm run verify            # parser/resolver/treeEdit regression suite
+npm run verify            # regression suite
 npm run electron:preview  # npm run build, then open dist/ in a plain Electron shell
 npm run electron:package  # electron-builder --dir (default output: web/release)
 ```
@@ -320,20 +327,27 @@ via `/DAppSourceDir`. Requires Node.js and Inno Setup 6
 
 ## Conventions worth preserving
 
-- All source-text mutations go through `applySource` (undo/redo integrity).
+- The source text changes only through `applySource` / `commitDoc`
+  (`hooks/useFhDocument.ts`).
 - Designer edits produce new trees via `lib/treeEdit.ts` — no in-place mutation.
-- Dot-in-name means file; keep this rule consistent everywhere.
-- IDs are ephemeral: regenerate on parse, never serialize.
-- Single stylesheet (`index.css`); dark GitHub-ish palette with CSS variables.
+- Use `isFileNode(node)` for file-vs-folder; never test the name directly.
+- Carry comments whenever a document or node is copied or rebuilt.
+- Ids are never serialized; `lib/ids.ts` keeps them stable across re-parses.
+- Write, zip and preview the planned tree (`planTree`), never the raw
+  resolved tree. Never overwrite or delete on disk.
+- Single stylesheet (`index.css`) with CSS variables; system fonts only (the
+  desktop app must work offline).
 - Runtime fetches of bundled assets use `${import.meta.env.BASE_URL}`-relative
-  paths (not absolute `/...`) so they resolve in the browser, under Vite
-  preview, and inside Electron's `app://` scheme.
+  paths so they resolve in the browser, under Vite preview, and inside
+  Electron's `app://` scheme.
 - In Electron the app header doubles as the window title bar: `html.electron`
-  (set in `main.tsx` via UA sniffing) makes `.header` a drag region with
-  no-drag controls and right padding reserved for the native min/max/close
-  overlay; the overlay colors/height mirror `.header`'s CSS
-  (`TITLEBAR_*` constants in `electron/main.cjs`). Keep them in sync when
-  changing header padding/height or theme colors.
+  (set in `main.tsx`) makes `.header` a drag region with no-drag controls and
+  right padding for the native min/max/close overlay; the overlay colors and
+  height mirror the CSS (`--header-h`, `--bg-elev`, `--text` ↔ `TITLEBAR_*`
+  in `electron/main.cjs`). Keep them in sync.
 - All desktop icons derive from `public/Production-Sandbox_Icon.svg`; regenerate
   with `npm run icons` after changing it. The header brand mark is inlined as
   `BrandMarkIcon` (`src/components/icons.tsx`) — update it alongside the SVG.
+- The working copy lives in a OneDrive folder; keep heavy build output out of
+  it (see `build.bat`). Moving the repo outside OneDrive avoids sync locks on
+  `node_modules` entirely.
