@@ -3,7 +3,7 @@ import type { FhDocument } from "../lib/types";
 import type { SectionRef } from "./Designer";
 import { TEMPLATE_MIME } from "./Designer";
 import { countOwnNodes } from "../lib/treeEdit";
-import { starterBlocks } from "../lib/kit";
+import { describeStarter, starterBlocks } from "../lib/kit";
 import type { StarterBlock } from "../lib/kit";
 import { FolderIcon, PlusIcon, SearchIcon } from "./icons";
 
@@ -28,13 +28,16 @@ interface SidebarProps {
 
 export const DEFAULT_TEMPLATE_COLOR = "#f0b35a";
 
-const STARTERS = starterBlocks();
+const STARTERS = starterBlocks().map((st) => ({ st, inside: describeStarter(st) }));
+/** How many starter blocks show before "Show all". */
+const STARTERS_SHOWN = 5;
 
 /** Left column: the Root structure plus every block (template), always visible. */
 export default function Sidebar({ doc, colors, section, uses, blockSizes, onSelect, onAddTemplate, onAddStarter, onRemoveUnused, className, style }: SidebarProps) {
   const [filter, setFilter] = useState("");
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
+  const [allStarters, setAllStarters] = useState(false);
 
   const commitAdd = () => {
     const name = newName.trim();
@@ -152,11 +155,11 @@ export default function Sidebar({ doc, colors, section, uses, blockSizes, onSele
       )}
 
       <div className="side-head">
-        <div className="section-label">Starter blocks</div>
+        <div className="section-label">Starter blocks · {STARTERS.length}</div>
       </div>
       <div className="side-list">
-        {STARTERS.map((st) => (
-          <div className="starter" key={st.name}>
+        {(allStarters ? STARTERS : STARTERS.slice(0, STARTERS_SHOWN)).map(({ st, inside }) => (
+          <div className="starter" key={st.name} title={`${st.title} contains:\n${inside}`}>
             <span className="starter-text">
               <b>{st.title}</b>
               <small>{st.hint}</small>
@@ -167,6 +170,11 @@ export default function Sidebar({ doc, colors, section, uses, blockSizes, onSele
           </div>
         ))}
       </div>
+      <p className="side-hint">
+        <button type="button" className="link-btn" aria-expanded={allStarters} onClick={() => setAllStarters(!allStarters)}>
+          {allStarters ? "Show fewer" : `Show all ${STARTERS.length}`}
+        </button>
+      </p>
     </nav>
   );
 }

@@ -137,33 +137,115 @@ export interface StarterBlock {
   build: () => FsNode[];
 }
 
+const folders = (...names: string[]): FsNode[] => names.map((n) => folder(n));
+
+/**
+ * The ready-made blocks offered in the sidebar, most generally useful first
+ * (the sidebar shows the first few and tucks the rest behind "Show all").
+ */
 export function starterBlocks(year = new Date().getFullYear()): StarterBlock[] {
   return [
     {
       name: "PROJECT",
       title: "Project",
       hint: "The folders every project gets",
-      build: () => DEFAULT_PROJECT_FOLDERS.map((n) => folder(n)),
+      build: () => folders(...DEFAULT_PROJECT_FOLDERS),
+    },
+    {
+      name: "STAGES",
+      title: "Work stages",
+      hint: "Brief, working, review, final",
+      build: () => folders("01_Brief", "02_Working", "03_Review", "04_Final"),
+    },
+    {
+      name: "DATED",
+      title: "Dated folder",
+      hint: "Today’s date plus a name you type",
+      build: () => folders("{yymmdd}_{Name}"),
     },
     {
       name: "YEARS",
       title: "Years",
       hint: `One folder per year (${year}, ${year + 1})`,
-      build: () => [folder(String(year)), folder(String(year + 1))],
+      build: () => folders(String(year), String(year + 1)),
+    },
+    {
+      name: "CLIENT",
+      title: "Client",
+      hint: "Paperwork and projects for one client",
+      build: () => [folder("00_Admin", folders("Contract", "Invoices", "Notes")), folder("Projects")],
+    },
+    {
+      name: "VERSIONS",
+      title: "Current and old",
+      hint: "Keep the latest apart from the rest",
+      build: () => folders("Current", "Old"),
+    },
+    {
+      name: "MONTHS",
+      title: "Months",
+      hint: "January to December, in order",
+      build: () =>
+        ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((m, i) =>
+          folder(`${String(i + 1).padStart(2, "0")}_${m}`),
+        ),
+    },
+    {
+      name: "QUARTERS",
+      title: "Quarters",
+      hint: "Q1 to Q4",
+      build: () => folders("Q1", "Q2", "Q3", "Q4"),
     },
     {
       name: "ADMIN",
       title: "Admin",
-      hint: "Accounts, receipts, documents",
-      build: () => ["Accounts", "Receipts", "Documents", "Warranties"].map((n) => folder(n)),
+      hint: "Accounts, contracts, invoices, receipts",
+      build: () => folders("Accounts", "Contracts", "Invoices", "Receipts", "Insurance"),
+    },
+    {
+      name: "LIBRARY",
+      title: "Library",
+      hint: "Shared fonts, logos, photos, templates",
+      build: () => folders("Fonts", "Logos", "Photos", "Templates", "Audio"),
+    },
+    {
+      name: "SHOOT",
+      title: "Photo shoot",
+      hint: "RAW, selects, edits, delivered",
+      build: () => [...folders("01_RAW", "02_Selects", "03_Edits"), folder("04_Delivered", folders("Web", "Print"))],
+    },
+    {
+      name: "VIDEO",
+      title: "Video",
+      hint: "Script, footage, audio, project, export",
+      build: () => folders("01_Script", "02_Footage", "03_Audio", "04_Project", "05_Export"),
+    },
+    {
+      name: "BOOK",
+      title: "Book",
+      hint: "Manuscript, cover, interior, launch",
+      build: () => [folder("01_Manuscript", folders("Drafts", "Edits", "Final")), ...folders("02_Cover", "03_Interior", "04_Launch")],
     },
     {
       name: "ARCHIVE",
       title: "Archive",
       hint: "Old work, by year",
-      build: () => [folder(String(year - 2)), folder(String(year - 1))],
+      build: () => folders(String(year - 2), String(year - 1)),
     },
   ];
+}
+
+/** What a starter block contains, as indented lines (for a tooltip). */
+export function describeStarter(st: StarterBlock): string {
+  const lines: string[] = [];
+  const walk = (nodes: FsNode[], depth: number) => {
+    for (const n of nodes) {
+      lines.push(`${"    ".repeat(depth)}${n.name}`);
+      walk(n.children, depth + 1);
+    }
+  };
+  walk(st.build(), 0);
+  return lines.join("\n");
 }
 
 /** A template name not already in use: NAME, NAME_2, NAME_3, … */
