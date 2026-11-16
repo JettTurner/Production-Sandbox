@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FhDocument, FsNode } from "../lib/types";
 import { countNodes, resolveTree } from "../lib/resolver";
 import { planTree, MAX_PATH } from "../lib/validate";
+import { fillBlanks, findBlanks } from "../lib/blanks";
 import { createOnDisk, scanDestination, supportsFsAccess } from "../lib/folders";
 import type { CreateResult, DiskPlan } from "../lib/folders";
 import { CheckLine } from "./OutputPane";
@@ -23,6 +24,8 @@ const MAX_ROWS = 400;
  */
 export default function CreateDialog({ doc, initialTemplate, onClose }: CreateDialogProps) {
   const [scope, setScope] = useState<string>(initialTemplate ?? "");
+  // Answers to fill-in names ({Client}), keyed in lower case.
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [wrap, setWrap] = useState("");
   const [dir, setDir] = useState<FileSystemDirectoryHandle | null>(null);
   const [plan, setPlan] = useState<DiskPlan | null>(null);
@@ -38,15 +41,17 @@ export default function CreateDialog({ doc, initialTemplate, onClose }: CreateDi
     const source = scope ? doc.templates[scope] ?? [] : doc.root;
     const resolved = resolveTree(source, doc.templates);
     const wrapName = wrap.trim().replace(/[\\/]+$/, "");
-    const tree: FsNode[] = wrapName
+    const raw: FsNode[] = wrapName
       ? [{ id: "wrap", kind: "folder", name: wrapName, forceFolder: true, children: resolved.tree }]
       : resolved.tree;
-    return { ...planTree(tree), resolveErrors: resolved.errors };
-  }, [doc, scope, wrap]);
+    const blanks = findBlanks(raw);
+    const missing = blanks.filter((b) => !answers[b.toLowerCase()]?.trim());
+    return { ...planTree(fillBlanks(raw, answers)), resolveErrors: resolved.errors, blanks, missing };
+  }, [doc, scope, wrap, answers]);
   const stats = useMemo(() => countNodes(planned.tree), [planned.tree]);
-  const blocked = planned.errors > 0 || planned.resolveErrors.length > 0;
+  const blocked = planned.errors > 0 || planned.resolveErrors.length > 0 || planned.missing.length > 0;
 
-  useEffect(() => setResult(null), [scope, wrap]);
+  useEffect(() => setResult(null), [scope, wrap, answers]);
 
   // Re-run the dry run whenever the destination or the plan changes.
   useEffect(() => {
@@ -200,7 +205,28 @@ export default function CreateDialog({ doc, initialTemplate, onClose }: CreateDi
                 />
               </div>
 
+              {planned.blanks.length > 0 && (
+                <fieldset className="field">
+                  <legend className="field-label">Fill in the names</legend>
+                  {planned.blanks.map((b) => (
+                    <label className="blank-row" key={b}>
+                      <span>{b}</span>
+                      <input
+                        className="text-input mono"
+                        aria-label={b}
+                        value={answers[b.toLowerCase()] ?? ""}
+                        onChange={(e) => setAnswers((prev) => ({ ...prev, [b.toLowerCase()]: e.target.value }))}
+                        spellCheck={false}
+                      />
+                    </label>
+                  ))}
+                </fieldset>
+              )}
+
               <ul className="checks">
+                {planned.missing.length > 0 && (
+                  <CheckLine level="warning">Fill in {planned.missing.join(", ")} to continue</CheckLine>
+                )}
                 {planned.resolveErrors.map((e, i) => (
                   <CheckLine level="error" key={i}>{e}</CheckLine>
                 ))}

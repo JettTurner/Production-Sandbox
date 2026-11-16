@@ -3,12 +3,13 @@ import { createPortal } from "react-dom";
 import type { FsNode } from "../lib/types";
 import { isFileNode } from "../lib/types";
 import { cloneWithNewIds } from "../lib/ids";
+import { dropZone, keyAction, TEMPLATE_MIME } from "../lib/dnd";
 import { cleanTemplateName, insertChild, insertRelative, makeFile, makeFolder, makeInsert, moveNode, removeNode, renamedNode } from "../lib/treeEdit";
 import { ChevronIcon, CopyIcon, FileIcon, FolderIcon, GripIcon, PlusChildIcon, PlusIcon, XIcon } from "./icons";
 import ColorPicker from "./ColorPicker";
 
-/** Drag type used when a template is dragged from the sidebar onto the tree. */
-export const TEMPLATE_MIME = "application/x-fh-template";
+// Re-exported so existing imports keep working; the shared rules live in lib/dnd.ts.
+export { TEMPLATE_MIME };
 
 export interface SectionRef {
   kind: "root" | "template";
@@ -237,37 +238,34 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
 
   const onRowKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, node: FsNode, path: number[]) => {
     if (e.target !== e.currentTarget) return; // typing in a name field or a control
-    if (e.ctrlKey || e.metaKey) return;
+    const action = keyAction(e);
+    if (!action) return;
     const rows = visibleRows();
     const at = rows.findIndex((r) => r.node.id === node.id);
     const isOpenFolder = node.kind === "folder" && !isFileNode(node) && node.children.length > 0;
-    let handled = true;
-    if (e.altKey && e.key === "ArrowUp") moveAt(path, -1);
-    else if (e.altKey && e.key === "ArrowDown") moveAt(path, 1);
-    else if (e.key === "ArrowDown") {
+    if (action === "moveUp") moveAt(path, -1);
+    else if (action === "moveDown") moveAt(path, 1);
+    else if (action === "down") {
       if (rows[at + 1]) select(rows[at + 1].node.id, true);
-    } else if (e.key === "ArrowUp") {
+    } else if (action === "up") {
       if (rows[at - 1]) select(rows[at - 1].node.id, true);
-    } else if (e.key === "ArrowRight") {
+    } else if (action === "right") {
       if (isOpenFolder && collapsed.has(node.id)) setCollapsedFor(node.id, false);
       else if (isOpenFolder) select(node.children[0].id, true);
       else if (node.kind === "insert" && onToggleInsert && !expandedInserts?.has(node.id)) onToggleInsert(node.id);
-    } else if (e.key === "ArrowLeft") {
+    } else if (action === "left") {
       if (isOpenFolder && !collapsed.has(node.id)) setCollapsedFor(node.id, true);
       else if (node.kind === "insert" && onToggleInsert && expandedInserts?.has(node.id)) onToggleInsert(node.id);
       else {
         const parent = path.length > 1 ? nodeAt(nodes, path.slice(0, -1)) : null;
         if (parent) select(parent.id, true);
       }
-    } else if (e.key === "Enter" || e.key === "F2") {
+    } else if (action === "open" || action === "rename") {
       if (node.kind === "insert") onToggleInsert?.(node.id);
       else setEditing({ path, value: node.name });
-    } else if (e.key === "Delete" || e.key === "Backspace") deleteAt(path);
-    else handled = false;
-    if (handled) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+    } else deleteAt(path); // delete, back
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   const renderNode = (node: FsNode, depth: number, path: number[]) => {
@@ -310,15 +308,7 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
             e.preventDefault();
             e.stopPropagation();
             e.dataTransfer.dropEffect = isTemplate ? "copy" : "move";
-            const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-            const y = e.clientY - rect.top;
-            const third = rect.height / 3;
-            let position: DropState["position"];
-            if (insertable) {
-              position = y < third ? "before" : y > rect.height - third ? "after" : "into";
-            } else {
-              position = y < third ? "before" : "after";
-            }
+            const position = dropZone(e, insertable ? "folder" : "row");
             if (!dropState || dropState.targetId !== node.id || dropState.position !== position) {
               setDropState({ targetId: node.id, position });
             }

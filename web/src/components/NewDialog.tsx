@@ -13,6 +13,8 @@ interface NewDialogProps {
   /** Load generated (or blank) .fh text as a new, unsaved structure. */
   onCreate: (text: string) => void;
   onLoadSample: (value: string) => void;
+  /** Start from a real folder on this computer (absent where the browser cannot read folders). */
+  onImportFolder?: () => void;
   onClose: () => void;
 }
 
@@ -72,7 +74,7 @@ function ChipList({ values, onChange, addLabel, mono }: { values: string[]; onCh
  * answer a few plain questions, name it — with a live preview of the result.
  * The answers are turned into a normal .fh document by lib/kit.ts.
  */
-export default function NewDialog({ samples, onCreate, onLoadSample, onClose }: NewDialogProps) {
+export default function NewDialog({ samples, onCreate, onLoadSample, onImportFolder, onClose }: NewDialogProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [kit, setKit] = useState<"projects" | "blank">("projects");
   const [o, setO] = useState<KitOptions>(() => defaultKitOptions());
@@ -160,6 +162,16 @@ export default function NewDialog({ samples, onCreate, onLoadSample, onClose }: 
                     </button>
                   </div>
                 </section>
+                {onImportFolder && (
+                  <section className="question">
+                    <h3>Already have folders you like?</h3>
+                    <div className="chips">
+                      <button type="button" className="chip" onClick={onImportFolder}>
+                        Copy the layout of a folder on this computer…
+                      </button>
+                    </div>
+                  </section>
+                )}
                 <section className="question">
                   <h3>Or open an example</h3>
                   <div className="chips">

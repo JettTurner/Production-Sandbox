@@ -13,7 +13,9 @@ import { reconcileIds, cloneWithNewIds } from "../src/lib/ids";
 import { planTree, nameProblem } from "../src/lib/validate";
 import { buildKit, buildKitDocument, cleanNames, defaultKitOptions, starterBlocks, uniqueTemplateName } from "../src/lib/kit";
 import { renamedNode, moveSibling, moveToParent, findByName } from "../src/lib/treeEdit";
-import { scanDestination, createOnDisk } from "../src/lib/folders";
+import { scanDestination, createOnDisk, readFolder } from "../src/lib/folders";
+import { dateBlanks, fillBlanks, findBlanks, usesDateBlanks } from "../src/lib/blanks";
+import { dropZone, keyAction } from "../src/lib/dnd";
 import { isFileNode } from "../src/lib/types";
 import type { FsNode } from "../src/lib/types";
 
@@ -330,7 +332,7 @@ console.log(`\n== behavior checks ==`);
     check(serializeFh(doc) === text, "kit output is already in canonical form");
   }
   const flat = parseFh(buildKit({ ...defaultKitOptions(2026), sortBy: [], extras: [], numberTop: false })).doc!;
-  check(flat.root.length === 1 && flat.root[0].name === "Project-Name" && flat.templateOrder.join() === "PROJECT", "no sorting: just a project");
+  check(flat.root.length === 1 && flat.root[0].name === "{Project}" && flat.templateOrder.join() === "PROJECT", "no sorting: just a project");
   const bare = buildKitDocument({ ...defaultKitOptions(2026), sortBy: ["client"], projectFolders: [], extras: [] });
   check(bare.templateOrder.length === 0 && bare.root.map((n) => n.name).join(",") === "01_Client-A,02_Client-B", "no project folders: no PROJECT block");
   check(cleanNames([" A ", "a", "", "#x", "B/"]).join(",") === "A,B", "kit names are trimmed, de-duplicated and filtered");
@@ -358,6 +360,35 @@ console.log(`\n== behavior checks ==`);
   check(findByName(t4, "deep")[0].ids.length === 3 && findByName(t4, "  ").length === 0, "findByName is case-insensitive and ignores blank queries");
 }
 
+{
+  // ---- fill-in names ----
+  const d = parseFh(`@root\n{yymmdd}_{Client}_{Project}\n\t{date}\n\t@insert T\nNotes {client}.txt\nplain\n\n@template T\n\t{Project} files\n`).doc!;
+  const tree = resolveDoc(d).tree;
+  check(findBlanks(tree).join(",") === "Client,Project", `blanks found once each, dates excluded (${findBlanks(tree).join(",")})`);
+  check(usesDateBlanks(tree) && !usesDateBlanks(parseFh(`@root\nplain\n`).doc!.root), "date blanks detected");
+  const when = new Date(2026, 10, 16);
+  check(dateBlanks(when).date === "2026-11-16" && dateBlanks(when).yymmdd === "261116" && dateBlanks(when).yy === "26", "date blanks formatted");
+  const filled = fillBlanks(tree, { client: "Acme", project: "Tower" }, when);
+  check(filled[0].name === "261116_Acme_Tower" && filled[0].children[0].name === "2026-11-16", `names filled (${filled[0].name})`);
+  check(filled[0].children[1].name === "Tower files" && filled[1].name === "Notes Acme.txt", "blanks fill inside blocks and match any letter case");
+  check(fillBlanks(tree, { client: "Acme" }, when)[0].name === "261116_Acme_{Project}", "an unanswered blank is left as written");
+  check(tree[0].name === "{yymmdd}_{Client}_{Project}", "filling does not change the original tree");
+  check(planTree(filled).errors === 0, "filled names validate");
+}
+{
+  // ---- shared drag zones and keyboard map ----
+  const target = { getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }) } as unknown as Element;
+  const at = (x: number, y: number) => ({ clientX: x, clientY: y, currentTarget: target });
+  check(dropZone(at(50, 10), "row") === "before" && dropZone(at(50, 90), "row") === "after", "row zones are halves");
+  check(dropZone(at(50, 10), "folder") === "before" && dropZone(at(50, 50), "folder") === "into" && dropZone(at(50, 90), "folder") === "after", "folder zones are thirds");
+  check(dropZone(at(10, 50), "card") === "before" && dropZone(at(50, 50), "card") === "into" && dropZone(at(90, 50), "card") === "after", "card zones go left to right");
+  const k = (key: string, mods: Partial<{ altKey: boolean; ctrlKey: boolean; metaKey: boolean }> = {}) =>
+    keyAction({ key, altKey: false, ctrlKey: false, metaKey: false, ...mods });
+  check(k("F2") === "rename" && k("Delete") === "delete" && k("Enter") === "open" && k("Backspace") === "back", "editing keys mapped");
+  check(k("ArrowUp", { altKey: true }) === "moveUp" && k("ArrowRight", { altKey: true }) === "moveDown", "Alt+arrows reorder");
+  check(k("s", { ctrlKey: true }) === null && k("x") === null, "other keys are left alone");
+}
+
 // ---- dry run + create against an in-memory folder ----
 class MemDir {
   readonly kind = "directory" as const;
@@ -374,6 +405,10 @@ class MemDir {
       this.dirs.set(name, d);
     }
     return d;
+  }
+  async *entries(): AsyncGenerator<[string, { kind: "file"; name: string } | MemDir]> {
+    for (const [name, d] of this.dirs) yield [name, d];
+    for (const name of this.files.keys()) yield [name, { kind: "file", name }];
   }
   async getFileHandle(name: string, options?: { create?: boolean }) {
     if (this.dirs.has(name)) throw Object.assign(new Error("type mismatch"), { name: "TypeMismatchError" });
@@ -429,6 +464,26 @@ async function diskChecks() {
   const res3 = await createOnDisk(asDir(failDir), bad);
   check(res3.created === 1 && res3.failed?.path === "bad:name", "failure reports the path and what was created");
   check(!failDir.dirs.has("never"), "nothing is created after a failure");
+
+  // import: read a real folder back into a structure
+  const real = new MemDir("Studio");
+  const proj = await real.getDirectoryHandle("B_Project", { create: true });
+  await real.getDirectoryHandle("A_Admin", { create: true });
+  await real.getDirectoryHandle(".git", { create: true });
+  await real.getDirectoryHandle("node_modules", { create: true });
+  await proj.getDirectoryHandle("v1.2", { create: true });
+  await proj.getFileHandle("notes.txt", { create: true });
+  await proj.getFileHandle("LICENSE", { create: true });
+  const read = await readFolder(asDir(real), { includeFiles: true });
+  const shape = (ns: FsNode[]): string => ns.map((x) => `${x.name}${x.children.length ? `(${shape(x.children)})` : ""}`).join(" ");
+  check(shape(read.nodes) === "A_Admin B_Project(notes.txt v1.2)", `import reads folders and files, sorted (${shape(read.nodes)})`);
+  check(read.folders === 3 && read.files === 1 && read.skipped === 3, `import counts and skips hidden/system/undotted (${read.folders}/${read.files}/${read.skipped})`);
+  check(!isFileNode(read.nodes[1].children[1]) && isFileNode(read.nodes[1].children[0]), "an imported dotted folder stays a folder");
+  const foldersOnly = await readFolder(asDir(real), { includeFiles: false });
+  check(shape(foldersOnly.nodes) === "A_Admin B_Project(v1.2)" && foldersOnly.files === 0, "import can leave files out");
+  check((await readFolder(asDir(real), { includeFiles: true, limit: 2 })).truncated, "import stops at the limit");
+  const text = serializeFh({ ...parseFh("@root\n").doc!, root: read.nodes });
+  check(text.includes("\tv1.2/") && shape(parseFh(text).doc!.root) === shape(read.nodes), "an imported tree round-trips through .fh");
 }
 
 function flatten(nodes: { name: string; children: unknown[] }[]): { name: string }[] {

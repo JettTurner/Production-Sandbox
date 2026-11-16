@@ -3,6 +3,7 @@ import type { FhDocument, FsNode, ParseIssue } from "../lib/types";
 import { isFileNode } from "../lib/types";
 import BlocksView from "./BlocksView";
 import CodePane from "./CodePane";
+import Crumbs from "./Crumbs";
 import ColumnsView from "./ColumnsView";
 import ColorPicker from "./ColorPicker";
 import Designer from "./Designer";
@@ -34,7 +35,13 @@ interface EditorPaneProps {
   blockSizes: Record<string, number>;
   /** Changes when a different document is loaded. */
   docKey: number;
-  onSelectSection: (section: SectionRef) => void;
+  /** Open a block from inside another section (keeps a way back). */
+  onOpenBlock: (name: string) => void;
+  /** Sections the user came through to get here. */
+  origins: SectionRef[];
+  onBackTo: (index: number) => void;
+  /** "Create one of these": open the Create dialog for a single block. */
+  onCreateOne: (name: string) => void;
   source: string;
   onSourceChange: (value: string) => void;
   issues: ParseIssue[];
@@ -105,7 +112,10 @@ export default function EditorPane({
   onSourceOpenChange,
   blockSizes,
   docKey,
-  onSelectSection,
+  onOpenBlock,
+  origins,
+  onBackTo,
+  onCreateOne,
   source,
   onSourceChange,
   issues,
@@ -210,6 +220,9 @@ export default function EditorPane({
             <span className="editor-meta">
               {uses[templateName] ? `used ${uses[templateName]}×` : "not used anywhere yet"}
             </span>
+            <button type="button" className="btn small" onClick={() => onCreateOne(templateName)} title="Create just this block as real folders">
+              Create one…
+            </button>
             <button type="button" className="icon-btn" title="Rename this block" aria-label="Rename this block" onClick={() => setRenaming(templateName)}>
               <PencilIcon />
             </button>
@@ -335,6 +348,7 @@ export default function EditorPane({
         </>
       ) : view === "list" ? (
         <div className="editor-body">
+          {origins.length > 0 && <Crumbs origins={origins} onBackTo={onBackTo} section={section} onSectionRoot={() => {}} trail={[]} />}
           <div className="editor-tools">
             {hasInserts && (
               <button
@@ -390,9 +404,11 @@ export default function EditorPane({
               onRootChange,
               onTemplateNodesChange,
               onCreateTemplate,
-              onOpenBlock: (name: string) => onSelectSection({ kind: "template", name }),
+              onOpenBlock,
               onNotice,
               reveal,
+              origins,
+              onBackTo,
             };
             const key = `${docKey}:${templateName ?? "@root"}`;
             return view === "columns" ? <ColumnsView key={key} {...props} /> : <BlocksView key={key} {...props} />;

@@ -10,6 +10,8 @@ interface OutputPaneProps {
   /** Circular / missing template errors from the resolver. */
   resolveErrors: string[];
   templateColors: Record<string, string>;
+  /** Fill-in names ({Client}) that Create will ask for. */
+  blanks: string[];
   canCreateOnDisk: boolean;
   onCreate: () => void;
   onZip: () => void;
@@ -42,6 +44,7 @@ export default function OutputPane({
   stats,
   resolveErrors,
   templateColors,
+  blanks,
   canCreateOnDisk,
   onCreate,
   onZip,
@@ -90,6 +93,11 @@ export default function OutputPane({
               ? pathIssue.message
               : `Longest path is ${plan.longestPath} of ${MAX_PATH} characters`}
           </CheckLine>
+          {blanks.length > 0 && (
+            <CheckLine level="ok">
+              Create will ask for {blanks.length === 1 ? "one name" : `${blanks.length} names`}: {blanks.join(", ")}
+            </CheckLine>
+          )}
         </ul>
       </div>
 

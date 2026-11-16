@@ -145,6 +145,68 @@ export async function createOnDisk(
   return { created, skipped, ...(failed ? { failed } : {}) };
 }
 
+// ---------- Import: read an existing folder into a structure ----------
+
+export interface ReadResult {
+  nodes: FsNode[];
+  folders: number;
+  files: number;
+  /** Entries left out: hidden/system items, and files with no dot in their name (the format cannot express those). */
+  skipped: number;
+  /** True when the folder was bigger than the limit and reading stopped early. */
+  truncated: boolean;
+}
+
+const SKIP_NAMES = new Set(["node_modules", "$recycle.bin", "system volume information", "thumbs.db", "desktop.ini"]);
+
+/**
+ * Reads a real folder into FsNodes (names only; file contents are never read).
+ * Names starting with a dot and a few system folders are skipped.
+ */
+export async function readFolder(
+  dir: FileSystemDirectoryHandle,
+  opts: { includeFiles: boolean; limit?: number },
+): Promise<ReadResult> {
+  const limit = opts.limit ?? 5000;
+  const res: ReadResult = { nodes: [], folders: 0, files: 0, skipped: 0, truncated: false };
+  let n = 0;
+  const id = () => `imp${(n++).toString(36)}${Date.now().toString(36)}`;
+
+  async function walk(handle: FileSystemDirectoryHandle): Promise<FsNode[]> {
+    const entries: [string, FileSystemFileHandle | FileSystemDirectoryHandle][] = [];
+    for await (const entry of handle.entries()) entries.push(entry);
+    entries.sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: "base" }));
+    const out: FsNode[] = [];
+    for (const [name, child] of entries) {
+      if (res.folders + res.files >= limit) {
+        res.truncated = true;
+        break;
+      }
+      if (name.startsWith(".") || SKIP_NAMES.has(name.toLowerCase())) {
+        res.skipped++;
+        continue;
+      }
+      if (child.kind === "directory") {
+        res.folders++;
+        const node: FsNode = { id: id(), kind: "folder", name, forceFolder: true, children: [] };
+        out.push(node);
+        node.children = await walk(child);
+      } else if (opts.includeFiles) {
+        if (!name.includes(".")) {
+          res.skipped++;
+          continue;
+        }
+        res.files++;
+        out.push({ id: id(), kind: "folder", name, children: [] });
+      }
+    }
+    return out;
+  }
+
+  res.nodes = await walk(dir);
+  return res;
+}
+
 export function supportsFsAccess(): boolean {
   return typeof window !== "undefined" && "showDirectoryPicker" in window;
 }

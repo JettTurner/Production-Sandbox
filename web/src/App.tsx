@@ -4,6 +4,7 @@ import CreateDialog from "./components/CreateDialog";
 import EditorPane from "./components/EditorPane";
 import type { EditorView } from "./components/EditorPane";
 import NewDialog from "./components/NewDialog";
+import WhatsNewDialog from "./components/WhatsNewDialog";
 import OutputPane from "./components/OutputPane";
 import Sidebar from "./components/Sidebar";
 import type { SectionRef } from "./components/Designer";
@@ -32,10 +33,14 @@ import {
   writeToHandle,
   zipTree,
 } from "./lib/export";
-import { supportsFsAccess } from "./lib/folders";
+import { readFolder, supportsFsAccess } from "./lib/folders";
+import { findBlanks } from "./lib/blanks";
+import { serializeFh } from "./lib/serializer";
+import { hasAccess, isFirstRun, listRecent, loadSession, rememberFile, saveSession } from "./lib/session";
+import type { RecentFile } from "./lib/session";
 import { cleanTemplateName, countTemplateUses, removeTemplateRefs, renameTemplateInTree } from "./lib/treeEdit";
 import { planTree } from "./lib/validate";
-import { newId } from "./lib/types";
+import { emptyDocument, newId } from "./lib/types";
 import type { FsNode } from "./lib/types";
 
 // First-paint + offline fallback; the real startup content is fetched from
@@ -88,6 +93,16 @@ interface Toast {
   msg: string;
 }
 
+type Theme = "dark" | "light";
+const THEME_KEY = "fh-theme";
+function storedTheme(): Theme {
+  try {
+    return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+}
+
 type MobileTab = "structure" | "templates" | "output";
 
 let toastSeq = 0;
@@ -110,6 +125,25 @@ export default function App() {
   const [sidebarW, setSidebarW] = useState(252);
   const [outputW, setOutputW] = useState(400);
   const [createOpen, setCreateOpen] = useState(false);
+  // The block the Create dialog starts on ("Create one…"), or null for the whole structure.
+  const [createBlock, setCreateBlock] = useState<string | null>(null);
+  // Sections the user came through by opening a block from inside another one (the way back).
+  const [origins, setOrigins] = useState<SectionRef[]>([]);
+  const [recent, setRecent] = useState<RecentFile[]>([]);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const [theme, setTheme] = useState<Theme>(storedTheme);
+  // Decided once: a brand-new browser profile with nothing to restore starts in the New dialog.
+  const firstRun = useRef<boolean | null>(null);
+  if (firstRun.current === null) firstRun.current = !loadSession() && isFirstRun();
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      /* not remembered, still works */
+    }
+  }, [theme]);
   const [moreOpen, setMoreOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
@@ -136,6 +170,7 @@ export default function App() {
   const plan = useMemo(() => planTree(resolved.tree), [resolved.tree]);
   const stats = useMemo(() => countNodes(plan.tree), [plan.tree]);
   const uses = useMemo(() => countTemplateUses([doc.root, ...Object.values(doc.templates)]), [doc]);
+  const blanks = useMemo(() => findBlanks(plan.tree), [plan.tree]);
   // What each block creates on its own (shown on bricks in the Blocks view).
   const blockSizes = useMemo(() => {
     const out: Record<string, number> = {};
@@ -158,16 +193,36 @@ export default function App() {
   const errorCount = parseErrors + resolved.errors.length + plan.errors;
   const warningCount = parseWarnings + plan.warnings + (plan.duplicates ? 1 : 0);
 
-  // If the selected template disappears (delete, undo, new file), fall back to Root.
+  // If the selected block disappears (delete, undo, new file), fall back to Root.
   useEffect(() => {
-    if (section.kind === "template" && !doc.templates[section.name!]) setSection({ kind: "root" });
-  }, [section, doc.templates]);
+    if (section.kind === "template" && !doc.templates[section.name!]) {
+      setSection({ kind: "root" });
+      setOrigins([]);
+    } else if (origins.some((o) => o.kind === "template" && !doc.templates[o.name!])) {
+      setOrigins((prev) => prev.filter((o) => o.kind === "root" || !!doc.templates[o.name!]));
+    }
+  }, [section, origins, doc.templates]);
 
+  // Picking a section from the sidebar starts a fresh path.
   const selectSection = useCallback((next: SectionRef) => {
     setSection(next);
+    setOrigins([]);
     setSourceOpen(false);
     setMobileTab("structure");
   }, []);
+
+  // Opening a block from inside another section remembers where you came from,
+  // so the path bar always offers a way back.
+  const openBlock = (name: string) => {
+    if (section.kind === "template" && section.name === name) return;
+    setOrigins((prev) => [...prev, section]);
+    setSection({ kind: "template", name });
+    setSourceOpen(false);
+  };
+  const backTo = (index: number) => {
+    setSection(origins[index]);
+    setOrigins(origins.slice(0, index));
+  };
 
   // ---------------- File I/O ----------------
   const dirtyRef = useRef(dirty);
@@ -183,11 +238,18 @@ export default function App() {
       setFileName(name);
       setFileHandle(handle);
       setSection({ kind: "root" });
+      setOrigins([]);
       setNameDraft(null);
       setDocKey((k) => k + 1);
     },
     [load],
   );
+
+  const remember = useCallback((handle: FileSystemFileHandle) => {
+    rememberFile(handle)
+      .then(listRecent)
+      .then(setRecent);
+  }, []);
 
   const openFile = useCallback(async () => {
     if (!supportsFilePickers()) {
@@ -197,11 +259,58 @@ export default function App() {
     if (!confirmDiscard()) return;
     try {
       const opened = await pickAndOpenFile();
-      if (opened) openText(opened.text, opened.name, opened.handle);
+      if (opened) {
+        openText(opened.text, opened.name, opened.handle);
+        if (opened.handle) remember(opened.handle);
+      }
     } catch (err) {
       notify(`Could not open the file: ${(err as Error).message}`, "error");
     }
-  }, [confirmDiscard, notify, openText]);
+  }, [confirmDiscard, notify, openText, remember]);
+
+  // Reopen a remembered file. The browser may ask for permission again (it needs this click to do so).
+  const openRecent = async (r: RecentFile) => {
+    setMoreOpen(false);
+    if (!confirmDiscard()) return;
+    try {
+      if (!(await hasAccess(r.handle, true))) {
+        notify(`No permission to open ${r.name}. Use Open to pick it again.`, "error");
+        return;
+      }
+      const file = await r.handle.getFile();
+      openText(await file.text(), file.name, r.handle);
+      remember(r.handle);
+    } catch (err) {
+      notify(`Could not open ${r.name}: ${(err as Error).message}`, "error");
+    }
+  };
+
+  // Read a real folder from this computer into a new structure (folder names only).
+  const importFolder = async () => {
+    setMoreOpen(false);
+    if (!supportsFsAccess()) {
+      notify("Importing a folder needs Chrome, Edge or the desktop app.", "error");
+      return;
+    }
+    try {
+      const dir = await window.showDirectoryPicker!({ id: "fh-import", mode: "read" });
+      if (!confirmDiscard()) return;
+      const res = await readFolder(dir, { includeFiles: false });
+      const d = emptyDocument();
+      d.name = dir.name;
+      d.rootComments = ["#---Root---"];
+      d.root = [{ id: newId(), kind: "folder", name: dir.name, forceFolder: true, children: res.nodes }];
+      setNewOpen(false);
+      openText(serializeFh(d), null, null, true);
+      notify(
+        res.truncated
+          ? `Imported the first ${res.folders.toLocaleString()} folders from "${dir.name}" (it has more).`
+          : `Imported ${res.folders.toLocaleString()} folders from "${dir.name}". Files were left out.`,
+      );
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") notify(`Could not read that folder: ${(err as Error).message}`, "error");
+    }
+  };
 
   const openFromInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -234,6 +343,7 @@ export default function App() {
       if (supportsFilePickers()) {
         const handle = await pickAndSaveFile(source, name);
         if (!handle) return;
+        remember(handle);
         setFileHandle(handle);
         setFileName(handle.name);
         notify(`Saved ${handle.name}.`);
@@ -245,7 +355,7 @@ export default function App() {
     } catch (err) {
       notify(`Save failed: ${(err as Error).message}`, "error");
     }
-  }, [fh, notify, source, suggestedName]);
+  }, [fh, notify, remember, source, suggestedName]);
 
   // Ctrl+S writes straight back to the opened file; it only prompts the first time.
   const save = useCallback(async () => {
@@ -268,10 +378,24 @@ export default function App() {
     openText(text, null, null, true);
   };
 
-  // On boot, load the startup sample so the shipped file is the single source
-  // of truth; keep the built-in default if the fetch fails.
+  // On launch: pick up where the last visit left off. Only a brand-new profile
+  // gets the startup sample (and the New dialog on top of it).
   useEffect(() => {
     let cancelled = false;
+    const session = loadSession();
+    listRecent().then(async (list) => {
+      if (cancelled) return;
+      setRecent(list);
+      // Re-attach the file so Save keeps writing to it, if the browser still allows it without asking.
+      const match = session?.fileName ? list.find((r) => r.name === session.fileName) : undefined;
+      if (match && (await hasAccess(match.handle, false)) && !cancelled) setFileHandle(match.handle);
+    });
+    if (session) {
+      openText(session.source, session.fileName, null, session.unsaved);
+      return () => {
+        cancelled = true;
+      };
+    }
     fetch(`${import.meta.env.BASE_URL}samples/startup.fh`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -283,10 +407,17 @@ export default function App() {
       .catch(() => {
         /* stay on the built-in default */
       });
+    if (firstRun.current) setNewOpen(true);
     return () => {
       cancelled = true;
     };
   }, [openText]);
+
+  // Keep the session current so the next launch can restore it.
+  useEffect(() => {
+    const timer = setTimeout(() => saveSession({ source, fileName, unsaved: dirty }), 400);
+    return () => clearTimeout(timer);
+  }, [source, fileName, dirty]);
 
   // ---------------- Output actions ----------------
   const blocked = resolved.errors.length > 0 || plan.errors > 0;
@@ -394,6 +525,20 @@ export default function App() {
       templateComments: drop(d.templateComments),
     }));
     notify(`Deleted the block "${name}" everywhere it was used. Undo brings it back.`);
+  };
+
+  const removeUnused = (names: string[]) => {
+    const gone = new Set(names);
+    const keep = <T,>(rec: Record<string, T>): Record<string, T> =>
+      Object.fromEntries(Object.entries(rec).filter(([k]) => !gone.has(k)));
+    commitDoc((d) => ({
+      ...d,
+      templates: keep(d.templates),
+      templateOrder: d.templateOrder.filter((t) => !gone.has(t)),
+      templateColors: keep(d.templateColors),
+      templateComments: keep(d.templateComments),
+    }));
+    notify(`Removed ${names.length} unused ${names.length === 1 ? "block" : "blocks"}. Undo brings ${names.length === 1 ? "it" : "them"} back.`);
   };
 
   const setColor = (name: string, color: string) =>
@@ -564,6 +709,22 @@ export default function App() {
                 <button type="button" role="menuitem" className="more-item" onClick={saveAs}>
                   Save as…<kbd>Ctrl+Shift+S</kbd>
                 </button>
+                {supportsFsAccess() && (
+                  <button type="button" role="menuitem" className="more-item" onClick={importFolder}>
+                    Import a folder…
+                  </button>
+                )}
+                {recent.length > 0 && (
+                  <>
+                    <div className="more-sep" />
+                    <div className="more-label">Recent</div>
+                    {recent.map((r) => (
+                      <button type="button" role="menuitem" className="more-item mono" key={r.name} onClick={() => openRecent(r)}>
+                        {r.name}
+                      </button>
+                    ))}
+                  </>
+                )}
                 <div className="more-sep" />
                 <div className="more-label">Samples</div>
                 {SAMPLES.map((s) => (
@@ -571,6 +732,13 @@ export default function App() {
                     {s.label}
                   </button>
                 ))}
+                <div className="more-sep" />
+                <button type="button" role="menuitem" className="more-item" onClick={() => { setMoreOpen(false); setTheme(theme === "dark" ? "light" : "dark"); }}>
+                  {theme === "dark" ? "Light theme" : "Dark theme"}
+                </button>
+                <button type="button" role="menuitem" className="more-item" onClick={() => { setMoreOpen(false); setWhatsNewOpen(true); }}>
+                  What’s new<kbd>v{__APP_VERSION__}</kbd>
+                </button>
               </div>
             )}
           </div>
@@ -590,6 +758,7 @@ export default function App() {
           onSelect={selectSection}
           onAddTemplate={addTemplate}
           onAddStarter={addStarter}
+          onRemoveUnused={removeUnused}
         />
         <ColumnResizer onResize={(dx) => setSidebarW((w) => clamp(w + dx, SIDEBAR_MIN, SIDEBAR_MAX))} />
         <EditorPane
@@ -603,7 +772,13 @@ export default function App() {
           onSourceOpenChange={setSourceOpen}
           blockSizes={blockSizes}
           docKey={docKey}
-          onSelectSection={selectSection}
+          onOpenBlock={openBlock}
+          origins={origins}
+          onBackTo={backTo}
+          onCreateOne={(name) => {
+            setCreateBlock(name);
+            setCreateOpen(true);
+          }}
           source={source}
           onSourceChange={(text) => applySource(normalizeSource(text))}
           issues={fh.issues}
@@ -624,8 +799,12 @@ export default function App() {
           stats={stats}
           resolveErrors={resolved.errors}
           templateColors={colors}
+          blanks={blanks}
           canCreateOnDisk={supportsFsAccess()}
-          onCreate={() => setCreateOpen(true)}
+          onCreate={() => {
+            setCreateBlock(null);
+            setCreateOpen(true);
+          }}
           onZip={downloadZip}
           onCopy={copyStructure}
         />
@@ -657,15 +836,19 @@ export default function App() {
       </nav>
 
       {newOpen && (
-        <NewDialog samples={SAMPLES} onCreate={createFromKit} onLoadSample={loadSample} onClose={() => setNewOpen(false)} />
+        <NewDialog
+          samples={SAMPLES}
+          onCreate={createFromKit}
+          onLoadSample={loadSample}
+          onImportFolder={supportsFsAccess() ? importFolder : undefined}
+          onClose={() => setNewOpen(false)}
+        />
       )}
 
+      {whatsNewOpen && <WhatsNewDialog onClose={() => setWhatsNewOpen(false)} />}
+
       {createOpen && (
-        <CreateDialog
-          doc={doc}
-          initialTemplate={null}
-          onClose={() => setCreateOpen(false)}
-        />
+        <CreateDialog doc={doc} initialTemplate={createBlock} onClose={() => setCreateOpen(false)} />
       )}
 
       <div className="toasts" role="status" aria-live="polite">

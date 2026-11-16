@@ -9,6 +9,8 @@ interface FileSystemWritableFileStream extends WritableStream<Blob | string | Bu
 interface FileSystemFileHandle {
   readonly kind: "file";
   readonly name: string;
+  queryPermission?(options?: { mode?: "read" | "readwrite" }): Promise<"granted" | "denied" | "prompt">;
+  requestPermission?(options?: { mode?: "read" | "readwrite" }): Promise<"granted" | "denied" | "prompt">;
   createWritable(): Promise<FileSystemWritableFileStream>;
   getFile(): Promise<File>;
 }
@@ -53,3 +55,5 @@ interface Window {
   showOpenFilePicker?: (options?: FileSystemOpenFilePickerOptions) => Promise<FileSystemFileHandle[]>;
   showSaveFilePicker?: (options?: FileSystemSaveFilePickerOptions) => Promise<FileSystemFileHandle>;
 }
+/** App version from web/package.json, injected by vite.config.ts. */
+declare const __APP_VERSION__: string;

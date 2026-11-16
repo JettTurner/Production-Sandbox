@@ -15,10 +15,13 @@ import {
   renamedNode,
   updateNode,
 } from "../lib/treeEdit";
-import { PlusDropdown, TEMPLATE_MIME } from "./Designer";
+import { dropZone, keyAction, NODE_MIME, TEMPLATE_MIME } from "../lib/dnd";
+import type { DropPos } from "../lib/dnd";
+import { PlusDropdown } from "./Designer";
 import type { AddSpec, SectionRef } from "./Designer";
+import Crumbs from "./Crumbs";
 import NameInput from "./NameInput";
-import { ChevronIcon, CopyIcon, FileIcon, FolderIcon, PencilIcon, PlusIcon, TemplatesIcon, XIcon } from "./icons";
+import { ChevronIcon, CopyIcon, FileIcon, FolderIcon, MoveIcon, PencilIcon, PlusIcon, TemplatesIcon, XIcon } from "./icons";
 
 export interface ViewProps {
   doc: FhDocument;
@@ -35,11 +38,10 @@ export interface ViewProps {
   onNotice: (message: string) => void;
   /** Ask the view to show and focus a node (from Find): ids from the top of the section down to it. */
   reveal?: { ids: string[]; seq: number } | null;
+  /** Sections the user came through to get here; shown at the start of the path so there is a way back. */
+  origins: SectionRef[];
+  onBackTo: (index: number) => void;
 }
-
-/** Drag type for folders/files/block lines being moved inside a view. */
-export const NODE_MIME = "application/x-fh-node";
-export type DropPos = "before" | "after" | "into";
 
 /** Which tree a column edits: the root, or a block's own contents. */
 type Owner = { kind: "root" } | { kind: "template"; name: string };
@@ -70,7 +72,11 @@ export default function ColumnsView({
   onOpenBlock,
   onNotice,
   reveal,
+  origins,
+  onBackTo,
 }: ViewProps) {
+  // Touch "Move": the row that has been picked up, waiting for a tap on where it goes.
+  const [moving, setMoving] = useState<{ id: string; owner: string; name: string } | null>(null);
   const [sel, setSel] = useState<string[]>([]);
   const [drag, setDrag] = useState<{ id: string; owner: string } | null>(null);
   const [dropRow, setDropRow] = useState<{ id: string; pos: DropPos } | null>(null);
@@ -143,6 +149,20 @@ export default function ColumnsView({
     setDropCol(null);
   };
 
+  /** Put the picked-up row into a folder of the same tree (or the column's own level when parentId is given). */
+  const putDown = (col: number, parentId: string | null) => {
+    const c = columns[col];
+    if (!moving) return;
+    if (ownerKey(c.owner) !== moving.owner) {
+      onNotice("That is inside a different block. Move it within the same block, or use Find.");
+    } else {
+      const next = moveToParent(ownerNodes(c.owner), moving.id, parentId);
+      if (next === ownerNodes(c.owner)) onNotice("It can't go inside itself.");
+      else commit(c.owner, next);
+    }
+    setMoving(null);
+  };
+
   const select = (col: number, id: string, focus = false) => {
     setSel((prev) => [...prev.slice(0, col), id]);
     setActive(col);
@@ -213,51 +233,56 @@ export default function ColumnsView({
   };
 
   const onKey = (e: React.KeyboardEvent, col: number, node: FsNode) => {
-    if (e.target !== e.currentTarget || e.ctrlKey || e.metaKey) return;
+    if (e.target !== e.currentTarget) return;
+    const action = keyAction(e);
+    if (!action) return;
     const c = columns[col];
     const at = c.nodes.findIndex((n) => n.id === node.id);
-    let handled = true;
-    if (e.altKey && e.key === "ArrowUp") move(col, node, -1);
-    else if (e.altKey && e.key === "ArrowDown") move(col, node, 1);
-    else if (e.key === "ArrowDown") {
+    if (action === "moveUp") move(col, node, -1);
+    else if (action === "moveDown") move(col, node, 1);
+    else if (action === "down") {
       if (c.nodes[at + 1]) select(col, c.nodes[at + 1].id, true);
-    } else if (e.key === "ArrowUp") {
+    } else if (action === "up") {
       if (c.nodes[at - 1]) select(col, c.nodes[at - 1].id, true);
-    } else if (e.key === "ArrowRight") {
+    } else if (action === "right") {
       const next = columns[col + 1];
       if (next?.nodes[0]) select(col + 1, next.nodes[0].id, true);
-    } else if (e.key === "ArrowLeft") {
+    } else if (action === "left") {
       if (col > 0 && sel[col - 1]) {
         setSel((prev) => prev.slice(0, col));
         setActive(col - 1);
         setFocusKey(`${col - 1}:${sel[col - 1]}`);
       }
-    } else if (e.key === "Enter" || e.key === "F2") {
+    } else if (action === "rename" || action === "open") {
       if (node.kind === "folder") setEditing({ id: node.id, value: node.name });
       else onOpenBlock(node.name);
-    } else if (e.key === "Delete" || e.key === "Backspace") remove(col, node);
-    else handled = false;
-    if (handled) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+    } else remove(col, node); // delete, back
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   return (
     <div className="columns-view">
-      <nav className="crumbs" aria-label="Path">
-        <button type="button" onClick={() => { setSel([]); setActive(0); }}>
-          {section.kind === "root" ? "Root" : section.name}
-        </button>
-        {selected.map((n, i) =>
-          n ? (
-            <span key={n.id}>
-              <ChevronIcon />
-              <button type="button" onClick={() => select(i, n.id)}>{n.name}</button>
-            </span>
-          ) : null,
-        )}
-      </nav>
+      <Crumbs
+        origins={origins}
+        onBackTo={onBackTo}
+        section={section}
+        onSectionRoot={() => {
+          setSel([]);
+          setActive(0);
+        }}
+        trail={selected.flatMap((n, i) => (n ? [{ key: n.id, label: n.name, onClick: () => select(i, n.id) }] : []))}
+      />
+      {moving && (
+        <div className="move-banner" role="status">
+          <span>
+            Moving <b>{moving.name}</b>. Tap the folder it should go into, or a column’s title to put it at that level.
+          </span>
+          <button type="button" className="btn small" onClick={() => setMoving(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
       <div className="columns" ref={scroller}>
         {columns.map((c, col) => {
           const block = c.owner.kind === "template" && !(col === 0 && section.kind === "template") ? c.owner.name : null;
@@ -295,7 +320,8 @@ export default function ColumnsView({
             >
               {/* A column that shows a block's contents is boxed in the block's color. */}
               <div
-                className="column-title"
+                className={`column-title ${moving ? "placing" : ""}`}
+                onClick={() => moving && putDown(col, c.parentId)}
                 title={
                   block
                     ? `Inside the block ${block}.${(uses[block] ?? 0) > 1 ? ` A change here updates all ${uses[block]} places it is used.` : ""}`
@@ -318,7 +344,7 @@ export default function ColumnsView({
                   return (
                     <div
                       key={node.id}
-                      className={`col-row ${isSel ? "selected" : ""} ${isActive ? "active" : ""} ${isInsert ? "is-block" : ""} ${drag?.id === node.id ? "dragging" : ""} ${dropRow?.id === node.id ? `drop-${dropRow.pos}` : ""}`}
+                      className={`col-row ${isSel ? "selected" : ""} ${isActive ? "active" : ""} ${isInsert ? "is-block" : ""} ${drag?.id === node.id ? "dragging" : ""} ${dropRow?.id === node.id ? `drop-${dropRow.pos}` : ""} ${moving?.id === node.id ? "picked" : ""}`}
                       draggable={!isEditing}
                       onDragStart={(e) => {
                         e.stopPropagation();
@@ -332,7 +358,10 @@ export default function ColumnsView({
                       aria-selected={isSel}
                       tabIndex={isSel || (!sel[col] && at === 0) ? 0 : -1}
                       data-row={`${col}:${node.id}`}
-                      onClick={() => select(col, node.id)}
+                      onClick={() => {
+                        if (moving && moving.id !== node.id && !isInsert && !isFile) putDown(col, node.id);
+                        else select(col, node.id);
+                      }}
                       onDoubleClick={() => (isInsert ? onOpenBlock(node.name) : setEditing({ id: node.id, value: node.name }))}
                       onKeyDown={(e) => onKey(e, col, node)}
                       onDragOver={(e) => {
@@ -341,10 +370,7 @@ export default function ColumnsView({
                           e.preventDefault();
                           e.stopPropagation();
                           e.dataTransfer.dropEffect = "move";
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const y = (e.clientY - rect.top) / rect.height;
-                          // Folders: top = before, middle = into, bottom = after. Others: halves.
-                          const pos: DropPos = isInsert || isFile ? (y < 0.5 ? "before" : "after") : y < 0.3 ? "before" : y > 0.7 ? "after" : "into";
+                          const pos: DropPos = dropZone(e, isInsert || isFile ? "row" : "folder");
                           if (dropRow?.id !== node.id || dropRow.pos !== pos) setDropRow({ id: node.id, pos });
                           if (dropCol !== null) setDropCol(null);
                           return;
@@ -407,6 +433,9 @@ export default function ColumnsView({
                               <PencilIcon />
                             </button>
                           )}
+                          <button type="button" className="icon-btn touch-only" title="Move: then tap where it should go" aria-label="Move" tabIndex={-1} onClick={(e) => { e.stopPropagation(); setMoving({ id: node.id, owner: ownerKey(c.owner), name: node.name }); }}>
+                            <MoveIcon />
+                          </button>
                           <button type="button" className="icon-btn touch-only" title="Move up" aria-label="Move up" tabIndex={-1} disabled={at === 0} onClick={(e) => { e.stopPropagation(); move(col, node, -1); }}>
                             <ChevronIcon className="up" />
                           </button>

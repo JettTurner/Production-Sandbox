@@ -20,6 +20,8 @@ interface SidebarProps {
   onAddTemplate: (name: string) => void;
   /** Add one of the ready-made starter blocks to this structure. */
   onAddStarter: (starter: StarterBlock) => void;
+  /** Delete every block that is not used anywhere. */
+  onRemoveUnused: (names: string[]) => void;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -29,7 +31,7 @@ export const DEFAULT_TEMPLATE_COLOR = "#f0b35a";
 const STARTERS = starterBlocks();
 
 /** Left column: the Root structure plus every block (template), always visible. */
-export default function Sidebar({ doc, colors, section, uses, blockSizes, onSelect, onAddTemplate, onAddStarter, className, style }: SidebarProps) {
+export default function Sidebar({ doc, colors, section, uses, blockSizes, onSelect, onAddTemplate, onAddStarter, onRemoveUnused, className, style }: SidebarProps) {
   const [filter, setFilter] = useState("");
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -45,6 +47,7 @@ export default function Sidebar({ doc, colors, section, uses, blockSizes, onSele
   const shown = q ? doc.templateOrder.filter((t) => t.toLowerCase().includes(q)) : doc.templateOrder;
   const rootActive = section.kind === "root";
   const rootCount = countOwnNodes(doc.root);
+  const unused = doc.templateOrder.filter((t) => !uses[t]);
 
   return (
     <nav className={`sidebar ${className ?? ""}`} style={style} aria-label="Structure">
@@ -139,6 +142,14 @@ export default function Sidebar({ doc, colors, section, uses, blockSizes, onSele
       </div>
 
       {doc.templateOrder.length > 0 && <p className="side-hint">Drag a block onto a folder to put it there.</p>}
+      {unused.length > 0 && (
+        <p className="side-hint tidy">
+          {unused.length === 1 ? "1 block isn’t used anywhere." : `${unused.length} blocks aren’t used anywhere.`}{" "}
+          <button type="button" className="link-btn" onClick={() => onRemoveUnused(unused)} title={`Remove: ${unused.join(", ")}`}>
+            Remove {unused.length === 1 ? "it" : "them"}
+          </button>
+        </p>
+      )}
 
       <div className="side-head">
         <div className="section-label">Starter blocks</div>

@@ -223,3 +223,16 @@ export const OutputIcon = (p: IconProps) => (
     <path d="m10.5 11.5 1.5 1.5 2.5-3" />
   </Stroke>
 );
+
+export const MoveIcon = (p: IconProps) => (
+  <Stroke {...p}>
+    <path d="M8 2v12M2 8h12M8 2 6 4M8 2l2 2M8 14l-2-2M8 14l2-2M2 8l2-2M2 8l2 2M14 8l-2-2M14 8l-2 2" />
+  </Stroke>
+);
+
+export const SunIcon = (p: IconProps) => (
+  <Stroke {...p}>
+    <circle cx="8" cy="8" r="3" />
+    <path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1" />
+  </Stroke>
+);

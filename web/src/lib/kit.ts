@@ -90,7 +90,8 @@ export function buildKitDocument(o: KitOptions): FhDocument {
   const projectFolders = cleanNames(o.projectFolders);
   const hasProject = projectFolders.length > 0;
   // Where a project lives: one example folder holding the PROJECT block.
-  const projectLeaf = (): FsNode[] => (hasProject ? [folder("Project-Name", [insert("PROJECT")])] : []);
+  // The name is a blank: "Create folders" asks what the project is called.
+  const projectLeaf = (): FsNode[] => (hasProject ? [folder("{Project}", [insert("PROJECT")])] : []);
 
   // Only sort levels that actually have names.
   const levels = o.sortBy
