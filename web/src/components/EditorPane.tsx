@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FhDocument, FsNode, ParseIssue } from "../lib/types";
 import { isFileNode } from "../lib/types";
 import BlocksView from "./BlocksView";
@@ -8,7 +8,8 @@ import ColorPicker from "./ColorPicker";
 import Designer from "./Designer";
 import type { SectionRef } from "./Designer";
 import { DEFAULT_TEMPLATE_COLOR } from "./Sidebar";
-import { CodeIcon, PencilIcon, XIcon } from "./icons";
+import { findByName } from "../lib/treeEdit";
+import { CodeIcon, FileIcon, FolderIcon, PencilIcon, SearchIcon, TemplatesIcon, XIcon } from "./icons";
 
 /** The three ways to look at and edit a section. */
 export type EditorView = "columns" | "list" | "blocks";
@@ -122,6 +123,11 @@ export default function EditorPane({
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [expandedInserts, setExpandedInserts] = useState<Set<string>>(new Set());
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [findOpen, setFindOpen] = useState(false);
+  const [findAt, setFindAt] = useState(0);
+  const [reveal, setReveal] = useState<{ ids: string[]; seq: number } | null>(null);
+  const findRef = useRef<HTMLInputElement>(null);
 
   const onCollapsedChange = useCallback((id: string, value: boolean) => setCollapsed((s) => toggleIn(s, id, value)), []);
   const onToggleInsert = useCallback((id: string) => setExpandedInserts((s) => toggleIn(s, id)), []);
@@ -131,6 +137,31 @@ export default function EditorPane({
 
   const nodes = templateName ? doc.templates[templateName] ?? [] : doc.root;
   const errors = issues.filter((i) => i.severity === "error");
+
+  // Find: search the names in the section being edited, then show the pick in the current view.
+  const matches = useMemo(() => findByName(nodes, query, 40), [nodes, query]);
+  useEffect(() => setFindAt(0), [query]);
+  useEffect(() => {
+    setQuery("");
+    setFindOpen(false);
+  }, [templateName, docKey]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f" && !sourceOpen) {
+        e.preventDefault();
+        findRef.current?.focus();
+        findRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sourceOpen]);
+  const pick = (ids: string[]) => {
+    // In the list, the folders above the match have to be open for it to show.
+    setCollapsed((prev) => withAll(prev, ids.slice(0, -1), false));
+    setReveal((r) => ({ ids, seq: (r?.seq ?? 0) + 1 }));
+    setFindOpen(false);
+  };
 
   // Expand / collapse for the section being edited. Folders and templates are
   // separate switches: "Expand folders" opens every folder and leaves templates
@@ -194,29 +225,63 @@ export default function EditorPane({
           </>
         )}
         <div className="spacer" />
-        {!sourceOpen && view === "list" && (
-          <div className="editor-tools">
-            {hasInserts && (
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => setAll(true, false)}
-                title="Open every folder; leave blocks closed"
-              >
-                Expand folders
-              </button>
+        {!sourceOpen && (
+          <div className="find">
+            <label className="search-field">
+              <SearchIcon />
+              <input
+                ref={findRef}
+                aria-label="Find a folder"
+                placeholder="Find a folder"
+                title="Find by name in this section (Ctrl+F)"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setFindOpen(true);
+                }}
+                onFocus={() => setFindOpen(true)}
+                onBlur={() => setTimeout(() => setFindOpen(false), 150)}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setFindAt((i) => Math.min(i + 1, matches.length - 1));
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setFindAt((i) => Math.max(i - 1, 0));
+                  } else if (e.key === "Enter" && matches[findAt]) {
+                    pick(matches[findAt].ids);
+                  } else if (e.key === "Escape") {
+                    setQuery("");
+                    setFindOpen(false);
+                  }
+                }}
+              />
+            </label>
+            {findOpen && query.trim() !== "" && (
+              <div className="find-results" role="listbox" aria-label="Matches">
+                {matches.length === 0 && <div className="find-empty">Nothing here is called that.</div>}
+                {matches.map((m, i) => (
+                  <button
+                    type="button"
+                    key={m.node.id}
+                    role="option"
+                    aria-selected={i === findAt}
+                    className={`find-item ${i === findAt ? "active" : ""}`}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pick(m.ids)}
+                  >
+                    <span className="node-icon">
+                      {m.node.kind === "insert" ? <TemplatesIcon /> : isFileNode(m.node) ? <FileIcon /> : <FolderIcon />}
+                    </span>
+                    <span className="find-text">
+                      <span className="find-name">{m.node.name}</span>
+                      {m.parents.length > 0 && <span className="find-path">in {m.parents.join(" / ")}</span>}
+                    </span>
+                  </button>
+                ))}
+              </div>
             )}
-            <button
-              type="button"
-              className="link-btn"
-              onClick={() => setAll(true, true)}
-              title={hasInserts ? "Open every folder and every block" : "Open every folder"}
-            >
-              Expand all
-            </button>
-            <button type="button" className="link-btn" onClick={() => setAll(false, false)} title="Close every folder and block">
-              Collapse all
-            </button>
           </div>
         )}
         <div className="segmented" role="group" aria-label="View">
@@ -270,6 +335,29 @@ export default function EditorPane({
         </>
       ) : view === "list" ? (
         <div className="editor-body">
+          <div className="editor-tools">
+            {hasInserts && (
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => setAll(true, false)}
+                title="Open every folder; leave blocks closed"
+              >
+                Expand folders
+              </button>
+            )}
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => setAll(true, true)}
+              title={hasInserts ? "Open every folder and every block" : "Open every folder"}
+            >
+              Expand all
+            </button>
+            <button type="button" className="link-btn" onClick={() => setAll(false, false)} title="Close every folder and block">
+              Collapse all
+            </button>
+          </div>
           <Designer
             key={`${docKey}:${templateName ?? "@root"}`}
             nodes={nodes}
@@ -287,6 +375,7 @@ export default function EditorPane({
             collapsed={collapsed}
             onCollapsedChange={onCollapsedChange}
             onNotice={onNotice}
+            reveal={reveal}
           />
         </div>
       ) : (
@@ -303,6 +392,7 @@ export default function EditorPane({
               onCreateTemplate,
               onOpenBlock: (name: string) => onSelectSection({ kind: "template", name }),
               onNotice,
+              reveal,
             };
             const key = `${docKey}:${templateName ?? "@root"}`;
             return view === "columns" ? <ColumnsView key={key} {...props} /> : <BlocksView key={key} {...props} />;

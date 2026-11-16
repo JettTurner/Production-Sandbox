@@ -615,9 +615,14 @@ html.electron .more-dropdown {
   white-space: nowrap;
 }
 .editor-tools {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: flex;
-  flex: 0 0 auto;
+  justify-content: flex-end;
   gap: 2px;
+  padding: 6px 12px 0;
+  background: var(--bg);
 }
 .segmented {
   display: inline-flex;
@@ -2563,7 +2568,7 @@ button.chip:hover {
 }
 
 @media (max-width: 860px) {
-  .crumbs-hint {
+  .crumbs > .crumbs-hint {
     display: none;
   }
   .crumbs button {
@@ -2641,5 +2646,154 @@ button.chip:hover {
     border-left: 0;
     border-top: 1px solid var(--border);
     padding: 16px 14px;
+  }
+}
+
+/* ---------- Find, block rows with sizes, drag indicators ---------- */
+.editor-head {
+  flex-wrap: wrap;
+}
+.find {
+  position: relative;
+  flex: 0 1 190px;
+  min-width: 130px;
+}
+.find-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  width: 340px;
+  max-width: 80vw;
+  max-height: 360px;
+  overflow: auto;
+  padding: 6px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+.find-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 40px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+.find-item:hover,
+.find-item.active {
+  background: var(--sel-bg);
+}
+.find-item .node-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: #8fb8e8;
+}
+.find-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.find-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.find-path {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.find-empty {
+  padding: 10px;
+  color: var(--muted);
+}
+
+.side-item.two-line {
+  min-height: 44px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.side-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.side-sub {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dragging {
+  opacity: 0.4;
+}
+.col-row.drop-before,
+.card-item.drop-before,
+.brick.drop-before:not(.big) {
+  box-shadow: 0 -2px 0 0 var(--accent);
+}
+.col-row.drop-after,
+.card-item.drop-after,
+.brick.drop-after:not(.big) {
+  box-shadow: 0 2px 0 0 var(--accent);
+}
+.col-row.drop-into {
+  background: var(--accent-weak);
+  border-color: var(--accent);
+}
+.card.drop-into {
+  border-color: var(--accent);
+  background: var(--sel-bg);
+}
+.card.drop-before,
+.brick.big.drop-before {
+  box-shadow: -3px 0 0 0 var(--accent);
+}
+.card.drop-after,
+.brick.big.drop-after {
+  box-shadow: 3px 0 0 0 var(--accent);
+}
+.board.drop {
+  background: var(--accent-weak);
+}
+.card,
+.card-item,
+.brick,
+.col-row {
+  -webkit-user-drag: element;
+}
+.card-item .name:focus-visible,
+.card-title:focus-visible,
+.brick:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (max-width: 860px) {
+  .find {
+    flex: 1 1 100%;
+    order: 5;
+  }
+  .find .search-field {
+    height: 40px;
+  }
+  .side-item.two-line {
+    min-height: 52px;
   }
 }

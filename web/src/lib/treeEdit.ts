@@ -211,6 +211,45 @@ export function moveSibling(root: FsNode[], id: string, dir: -1 | 1): FsNode[] {
   return insertChild(removeNode(root, id), parent, target, here.node);
 }
 
+/**
+ * Move a node to the end of another folder (parentId), or of the top level
+ * (null). Dropping a folder into itself or one of its own descendants is a
+ * no-op.
+ */
+export function moveToParent(root: FsNode[], dragId: string, parentId: string | null): FsNode[] {
+  const dragPath = findPath(root, dragId);
+  if (!dragPath) return root;
+  if (parentId !== null) {
+    const targetPath = findPath(root, parentId);
+    if (!targetPath || targetPath.some((p) => p.node.id === dragId)) return root;
+  }
+  const node = dragPath[dragPath.length - 1].node;
+  return insertChild(removeNode(root, dragId), parentId, Number.MAX_SAFE_INTEGER, node);
+}
+
+/** Every folder, file and block line in a tree whose name contains `query` (case-insensitive), with its path. */
+export interface FoundNode {
+  node: FsNode;
+  /** Ids from the top of the tree down to the node itself. */
+  ids: string[];
+  /** Names of the folders above it. */
+  parents: string[];
+}
+export function findByName(root: FsNode[], query: string, limit = 50): FoundNode[] {
+  const q = query.trim().toLowerCase();
+  const out: FoundNode[] = [];
+  if (!q) return out;
+  const walk = (nodes: FsNode[], ids: string[], parents: string[]) => {
+    for (const n of nodes) {
+      if (out.length >= limit) return;
+      if (n.name.toLowerCase().includes(q)) out.push({ node: n, ids: [...ids, n.id], parents });
+      walk(n.children, [...ids, n.id], [...parents, n.name]);
+    }
+  };
+  walk(root, [], []);
+  return out;
+}
+
 /** Insert `node` right after the sibling with id `afterId`. */
 export function insertAfter(root: FsNode[], afterId: string, node: FsNode): FsNode[] {
   return insertRelative(root, afterId, "after", node);

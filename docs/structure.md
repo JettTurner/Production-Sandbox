@@ -232,7 +232,8 @@ All return new trees; never mutate.
   folder), `makeFile`, `makeInsert`.
 - `renameTemplateInTree`, `removeTemplateRefs`, `countTemplateUses`.
 - `renamedNode(node, text)` — THE rename rule, shared by every view (rejects
-  bad names; never turns a folder into a file). `moveSibling`, `insertAfter`.
+  bad names; never turns a folder into a file). `moveSibling`, `insertAfter`,
+  `moveToParent` (drop onto a level), `findByName` (the Find box).
 
 ### `web/src/lib/kit.ts` — "start from a kit" and starter blocks
 
@@ -270,8 +271,9 @@ All return new trees; never mutate.
 | `BlocksView.tsx` | Blocks view: the current folder as a board of cards (one per folder, listing its contents); blocks are colored bricks; cards accept blocks dragged from the sidebar; click a folder name to go into it. Starts inside the top folder when there is only one. |
 | `ColumnsView.tsx` | Columns view: one column per level. Selecting a folder opens its children in the next column; selecting a block opens the block's own contents (edits there change the block everywhere). Each column knows which tree it edits (root or a block). Exports the `ViewProps` shared with `BlocksView`. |
 | `NewDialog.tsx` | The New dialog ("start from a kit"): three steps with a live preview; produces `.fh` text via `lib/kit.ts`. Also offers Blank and the bundled examples. |
+| *(all three views)* | Share drag types `TEMPLATE_MIME` (a block from the sidebar) and `NODE_MIME` (something being moved), the `reveal` prop (Find asks a view to show a node), and the rename / move helpers in `lib/treeEdit.ts`. |
 | `NameInput.tsx` | Inline rename field used by the Blocks and Columns views. |
-| `EditorPane.tsx` | Centre pane. Three views chosen by a segmented control (`Columns`, `List`, `Blocks`; remembered in localStorage) plus a Source toggle. Header (section title; for a template: color, rename, delete) + Tree/Source toggle. Expand all / Collapse all act on the section being edited. Tree mode renders `Designer` for the selected section; Source mode renders `CodePane` for the whole file plus the issue list. Owns collapsed-folder and expanded-insert state so it survives switching sections. |
+| `EditorPane.tsx` | Centre pane. A Find box (Ctrl+F) searches names in the section and reveals the pick in the current view. Three views chosen by a segmented control (`Columns`, `List`, `Blocks`; remembered in localStorage) plus a Source toggle. Header (section title; for a template: color, rename, delete) + Tree/Source toggle. Expand all / Collapse all act on the section being edited. Tree mode renders `Designer` for the selected section; Source mode renders `CodePane` for the whole file plus the issue list. Owns collapsed-folder and expanded-insert state so it survives switching sections. |
 | `Designer.tsx` | The List view: the tree editor (shared by Root, templates and inline-expanded inserts). Row = chevron, drag grip, icon, name, child count, actions. Actions show on hover/selection only. Selection + keyboard (arrows, Enter/F2, Del, Alt+↑/↓). Drag & drop to move; accepts sidebar templates. Inline rename validates names and never turns a folder into a file. `PlusDropdown` adds a folder, file, or template insert. |
 | `CodePane.tsx` | Contenteditable source editor with syntax highlighting, line numbers, Tab / Shift+Tab indent, auto-indent on Enter. |
 | `OutputPane.tsx` | Right pane. Stats, pre-flight checks (`CheckLine`), `Preview`, and the actions. Where the browser can't write folders, the zip is the primary action. |

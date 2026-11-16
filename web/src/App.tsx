@@ -586,6 +586,7 @@ export default function App() {
           colors={colors}
           section={section}
           uses={uses}
+          blockSizes={blockSizes}
           onSelect={selectSection}
           onAddTemplate={addTemplate}
           onAddStarter={addStarter}

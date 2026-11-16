@@ -12,7 +12,7 @@ import { makeFolder } from "../src/lib/treeEdit";
 import { reconcileIds, cloneWithNewIds } from "../src/lib/ids";
 import { planTree, nameProblem } from "../src/lib/validate";
 import { buildKit, buildKitDocument, cleanNames, defaultKitOptions, starterBlocks, uniqueTemplateName } from "../src/lib/kit";
-import { renamedNode, moveSibling } from "../src/lib/treeEdit";
+import { renamedNode, moveSibling, moveToParent, findByName } from "../src/lib/treeEdit";
 import { scanDestination, createOnDisk } from "../src/lib/folders";
 import { isFileNode } from "../src/lib/types";
 import type { FsNode } from "../src/lib/types";
@@ -348,6 +348,14 @@ console.log(`\n== behavior checks ==`);
   const t3 = parseFh(`@root\nA\nB\nC\n`).doc!.root;
   check(moveSibling(t3, t3[2].id, -1).map((n) => n.name).join("") === "ACB", "moveSibling moves up");
   check(moveSibling(t3, t3[0].id, -1) === t3, "moveSibling at the edge is a no-op");
+  const t4 = parseFh(`@root\nA\n\tA1\n\t\tDeep\nB\n`).doc!.root;
+  const names4 = (ns: FsNode[]): string => ns.map((n) => `${n.name}${n.children.length ? `(${names4(n.children)})` : ""}`).join(" ");
+  check(names4(moveToParent(t4, t4[1].id, t4[0].id)) === "A(A1(Deep) B)", "moveToParent appends inside a folder");
+  check(names4(moveToParent(t4, t4[0].children[0].id, null)) === "A B A1(Deep)", "moveToParent to the top level");
+  check(moveToParent(t4, t4[0].id, t4[0].children[0].id) === t4, "a folder cannot be moved into its own descendant");
+  const hits = findByName(t4, "a");
+  check(hits.map((h) => h.node.name).join(",") === "A,A1" && hits[1].parents.join("/") === "A" && hits[1].ids.length === 2, "findByName returns matches with their path");
+  check(findByName(t4, "deep")[0].ids.length === 3 && findByName(t4, "  ").length === 0, "findByName is case-insensitive and ignores blank queries");
 }
 
 // ---- dry run + create against an in-memory folder ----

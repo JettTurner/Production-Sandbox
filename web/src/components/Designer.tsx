@@ -39,6 +39,8 @@ interface DesignerProps {
    * is not expanded again, so a circular file cannot recurse forever.
    */
   expansionChain?: string[];
+  /** Ask the list to select and focus a node (from Find). */
+  reveal?: { ids: string[]; seq: number } | null;
 }
 
 interface DropState {
@@ -63,7 +65,7 @@ export type AddSpec =
   | { kind: "file" }
   | { kind: "insert"; template: string };
 
-export default function Designer({ nodes, section, templates, onNodesChange, templateMap, templateColors, expandedInserts, onToggleInsert, onTemplateNodesChange, onAddTemplate, onRenameTemplate, onSetTemplateColor, collapsed: collapsedProp, onCollapsedChange, onNotice, expansionChain }: DesignerProps) {
+export default function Designer({ nodes, section, templates, onNodesChange, templateMap, templateColors, expandedInserts, onToggleInsert, onTemplateNodesChange, onAddTemplate, onRenameTemplate, onSetTemplateColor, collapsed: collapsedProp, onCollapsedChange, onNotice, expansionChain, reveal }: DesignerProps) {
   const chain = expansionChain ?? (section.kind === "template" && section.name ? [section.name] : []);
   const [localCollapsed, setLocalCollapsed] = useState<Set<string>>(new Set());
   const collapsed = collapsedProp ?? localCollapsed;
@@ -110,6 +112,15 @@ export default function Designer({ nodes, section, templates, onNodesChange, tem
     el?.focus();
     setFocusId(null);
   }, [focusId]);
+
+  // Find: select the node and bring it into view (the parent already opened its folders).
+  useEffect(() => {
+    const id = reveal?.ids[reveal.ids.length - 1];
+    if (!id) return;
+    setSelectedId(id);
+    setFocusId(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reveal?.seq]);
 
   const select = (id: string, focus = false) => {
     setSelectedId(id);

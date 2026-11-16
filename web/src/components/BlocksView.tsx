@@ -1,10 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FsNode } from "../lib/types";
 import { isFileNode } from "../lib/types";
-import { insertChild, makeFile, makeFolder, makeInsert, removeNode, renamedNode, updateNode } from "../lib/treeEdit";
+import {
+  insertChild,
+  makeFile,
+  makeFolder,
+  makeInsert,
+  moveNode,
+  moveSibling,
+  moveToParent,
+  removeNode,
+  renamedNode,
+  updateNode,
+} from "../lib/treeEdit";
 import { PlusDropdown, TEMPLATE_MIME } from "./Designer";
 import type { AddSpec } from "./Designer";
-import type { ViewProps } from "./ColumnsView";
+import { NODE_MIME } from "./ColumnsView";
+import type { DropPos, ViewProps } from "./ColumnsView";
 import NameInput from "./NameInput";
 import { ChevronIcon, FileIcon, FolderIcon, PencilIcon, PlusIcon, TemplatesIcon, XIcon } from "./icons";
 
@@ -20,6 +32,11 @@ function autoEnter(nodes: FsNode[]): string[] {
  * Blocks view: the folder you are in is shown as a board of cards, one per
  * folder, each listing what is inside it. Blocks (templates) are dragged in
  * from the sidebar and show up as colored bricks. Click a folder to go into it.
+ *
+ * Everything on the board can be dragged: onto a card to put it inside, onto
+ * the edge of a card or row to place it before or after. Keyboard: arrows move
+ * between things, Enter goes into a folder, Backspace goes back up, F2
+ * renames, Del deletes, Alt+arrows reorder.
  */
 export default function BlocksView({
   doc,
@@ -31,6 +48,7 @@ export default function BlocksView({
   onCreateTemplate,
   onOpenBlock,
   onNotice,
+  reveal,
 }: ViewProps) {
   const templateName = section.kind === "template" ? section.name! : null;
   const nodes = templateName ? doc.templates[templateName] ?? [] : doc.root;
@@ -39,7 +57,10 @@ export default function BlocksView({
   const [loc, setLoc] = useState<string[]>(() => autoEnter(nodes));
   const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
   const [menu, setMenu] = useState<{ parentId: string | null; anchor: HTMLElement } | null>(null);
-  const [dropId, setDropId] = useState<string | null>(null);
+  const [drag, setDrag] = useState<string | null>(null);
+  const [drop, setDrop] = useState<{ id: string; pos: DropPos } | null>(null);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
 
   // Start inside the single top folder whenever a different section is opened.
   useEffect(() => {
@@ -47,6 +68,24 @@ export default function BlocksView({
     setEditing(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateName]);
+
+  // Find: go to the folder that holds the node, then focus it.
+  useEffect(() => {
+    if (!reveal || reveal.ids.length === 0) return;
+    // A node two levels down shows as a row inside a card, so stop one level higher.
+    const depth = Math.max(0, reveal.ids.length - 2);
+    setLoc(reveal.ids.slice(0, depth));
+    setFocusId(reveal.ids[reveal.ids.length - 1]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reveal?.seq]);
+
+  useEffect(() => {
+    if (!focusId) return;
+    const el = boardRef.current?.querySelector<HTMLElement>(`[data-nav][data-id="${CSS.escape(focusId)}"]`);
+    el?.focus();
+    el?.scrollIntoView({ block: "nearest" });
+    setFocusId(null);
+  }, [focusId, loc]);
 
   // Resolve the location; drop any part of it that no longer exists.
   const trail: FsNode[] = [];
@@ -58,10 +97,12 @@ export default function BlocksView({
     here = n.children;
   }
   const current = trail[trail.length - 1] ?? null;
+  const hereId = current?.id ?? null;
 
-  const enter = (path: FsNode[]) => {
+  const enter = (path: FsNode[], focus?: string) => {
     setLoc(path.map((n) => n.id));
     setEditing(null);
+    if (focus) setFocusId(focus);
   };
 
   const add = (parentId: string | null, spec: AddSpec) => {
@@ -71,10 +112,12 @@ export default function BlocksView({
       spec.kind === "insert" ? makeInsert(spec.template) : spec.kind === "file" ? makeFile("Untitled.txt") : makeFolder("New Folder");
     commit(insertChild(nodes, parentId, Number.MAX_SAFE_INTEGER, node));
     if (node.kind === "folder") setEditing({ id: node.id, value: node.name });
+    else setFocusId(node.id);
   };
 
   const rename = (node: FsNode, value: string) => {
     setEditing(null);
+    setFocusId(node.id);
     const result = renamedNode(node, value);
     if (!result) return;
     if ("error" in result) return onNotice(result.error);
@@ -83,82 +126,201 @@ export default function BlocksView({
 
   const remove = (node: FsNode) => commit(removeNode(nodes, node.id));
 
-  const dropProps = (targetId: string | null) => ({
+  // ---- drag & drop: blocks from the sidebar, and anything on the board ----
+  const endDrag = () => {
+    setDrag(null);
+    setDrop(null);
+  };
+  const draggingCard = !!drag && here.some((n) => n.id === drag);
+  const accepts = (e: React.DragEvent) => !!drag || e.dataTransfer.types.includes(TEMPLATE_MIME);
+
+  /** `id` null = the folder being shown. `zones` decides how the pointer position maps to before/after/into. */
+  const dropProps = (id: string | null, zones: "card" | "row" | "into") => ({
     onDragOver: (e: React.DragEvent) => {
-      if (!e.dataTransfer.types.includes(TEMPLATE_MIME)) return;
+      if (!accepts(e) || drag === id) return;
+      // While a whole card is being dragged, rows stay out of the way so the
+      // card underneath decides (before / into / after).
+      if (zones === "row" && id !== null && draggingCard && !here.some((n) => n.id === id)) return;
       e.preventDefault();
       e.stopPropagation();
-      e.dataTransfer.dropEffect = "copy";
-      const key = targetId ?? "@here";
-      if (dropId !== key) setDropId(key);
+      const fromSidebar = !drag;
+      e.dataTransfer.dropEffect = fromSidebar ? "copy" : "move";
+      let pos: DropPos = "into";
+      const rect = e.currentTarget.getBoundingClientRect();
+      if (zones === "row") pos = (e.clientY - rect.top) / rect.height < 0.5 ? "before" : "after";
+      else if (zones === "card" && !fromSidebar) {
+        const x = (e.clientX - rect.left) / rect.width;
+        pos = x < 0.22 ? "before" : x > 0.78 ? "after" : "into";
+      }
+      const key = id ?? "@here";
+      if (drop?.id !== key || drop.pos !== pos) setDrop({ id: key, pos });
     },
     onDragLeave: (e: React.DragEvent) => {
-      if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropId(null);
+      if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrop(null);
     },
     onDrop: (e: React.DragEvent) => {
-      const template = e.dataTransfer.getData(TEMPLATE_MIME);
-      setDropId(null);
-      if (!template) return;
+      if (!accepts(e) || drag === id) return;
+      if (zones === "row" && id !== null && draggingCard && !here.some((n) => n.id === id)) return;
       e.preventDefault();
       e.stopPropagation();
-      add(targetId, { kind: "insert", template });
+      const pos = drop?.pos ?? "into";
+      const moving = drag;
+      const template = e.dataTransfer.getData(TEMPLATE_MIME);
+      endDrag();
+      if (moving) {
+        if (id === null) commit(moveToParent(nodes, moving, hereId));
+        else commit(moveNode(nodes, moving, id, pos));
+        setFocusId(moving);
+      } else if (template) {
+        // A block from the sidebar: into a folder, or next to a row.
+        if (id === null || pos === "into") add(id ?? hereId, { kind: "insert", template });
+        else if (templateName === template) onNotice(`"${template}" can't insert itself.`);
+        else commit(insertNear(id, pos, template));
+      }
     },
   });
+  // Insert a new block line before/after an existing node.
+  const insertNear = (id: string, pos: DropPos, template: string): FsNode[] => {
+    const node = makeInsert(template);
+    const withNode = [...nodes, node]; // park it at the top level, then move it into place
+    return moveNode(withNode, node.id, id, pos);
+  };
+  const dragProps = (node: FsNode) => ({
+    draggable: editing?.id !== node.id,
+    onDragStart: (e: React.DragEvent) => {
+      e.stopPropagation();
+      e.dataTransfer.setData(NODE_MIME, node.id);
+      e.dataTransfer.effectAllowed = "move";
+      setDrag(node.id);
+    },
+    onDragEnd: endDrag,
+  });
+  const dropClass = (id: string) => `${drag === id ? "dragging" : ""} ${drop?.id === id ? `drop-${drop.pos}` : ""}`;
+
+  // ---- keyboard ----
+  const find = (id: string): { node: FsNode; parent: FsNode | null } | null => {
+    for (const n of here) {
+      if (n.id === id) return { node: n, parent: null };
+      for (const c of n.children) if (c.id === id) return { node: c, parent: n };
+    }
+    return null;
+  };
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === "INPUT" || e.ctrlKey || e.metaKey) return;
+    const el = target.closest<HTMLElement>("[data-nav]");
+    const all = Array.from(boardRef.current?.querySelectorAll<HTMLElement>("[data-nav]") ?? []);
+    const focusAt = (list: HTMLElement[], from: HTMLElement | null, step: number) => {
+      const i = from ? list.indexOf(from) : -1;
+      const next = list[i + step] ?? (i < 0 ? list[0] : undefined);
+      if (next) {
+        next.focus();
+        next.scrollIntoView({ block: "nearest" });
+      }
+    };
+    const found = el?.dataset.id ? find(el.dataset.id) : null;
+    let handled = true;
+    if (e.key === "Backspace" && trail.length > 0) enter(trail.slice(0, -1), current!.id);
+    else if (!el) handled = false;
+    else if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowLeft") && found) {
+      commit(moveSibling(nodes, found.node.id, -1));
+      setFocusId(found.node.id);
+    } else if (e.altKey && (e.key === "ArrowDown" || e.key === "ArrowRight") && found) {
+      commit(moveSibling(nodes, found.node.id, 1));
+      setFocusId(found.node.id);
+    } else if (e.key === "ArrowDown") focusAt(all, el, 1);
+    else if (e.key === "ArrowUp") focusAt(all, el, -1);
+    else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      const cards = all.filter((x) => x.dataset.nav === "card");
+      const card = el.dataset.nav === "card" ? el : el.closest<HTMLElement>(".card")?.querySelector<HTMLElement>('[data-nav="card"]') ?? null;
+      focusAt(cards, card, e.key === "ArrowRight" ? 1 : -1);
+    } else if (e.key === "F2" && found && found.node.kind === "folder") setEditing({ id: found.node.id, value: found.node.name });
+    else if ((e.key === "Delete") && found) {
+      const i = all.indexOf(el);
+      const neighbour = all[i + 1] ?? all[i - 1];
+      remove(found.node);
+      if (neighbour?.dataset.id) setFocusId(neighbour.dataset.id);
+    } else if (e.key === "Enter" && found?.node.kind === "insert") onOpenBlock(found.node.name);
+    else handled = false;
+    if (handled) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
 
   const openMenu = (parentId: string | null, e: React.MouseEvent<HTMLElement>) => {
     const anchor = e.currentTarget;
     setMenu((m) => (m?.anchor === anchor ? null : { parentId, anchor }));
   };
 
-  const nameOrInput = (node: FsNode, className: string) =>
-    editing?.id === node.id ? (
-      <NameInput
-        value={editing.value}
-        onChange={(value) => setEditing({ id: node.id, value })}
-        onCommit={(value) => rename(node, value)}
-        onCancel={() => setEditing(null)}
-      />
-    ) : (
-      <span className={className} title={node.name}>{node.name}</span>
-    );
+  const nameInput = (node: FsNode) => (
+    <NameInput
+      value={editing!.value}
+      onChange={(value) => setEditing({ id: node.id, value })}
+      onCommit={(value) => rename(node, value)}
+      onCancel={() => {
+        setEditing(null);
+        setFocusId(node.id);
+      }}
+    />
+  );
 
-  const brick = (node: FsNode, big = false) => {
+  const brick = (node: FsNode, top: boolean) => {
     const color = colors[node.name] ?? DEFAULT_COLOR;
     const size = blockSizes[node.name];
     const missing = !doc.templates[node.name];
     return (
       <div
         key={node.id}
-        className={`brick ${big ? "big" : ""}`}
+        className={`brick ${top ? "big" : ""} ${dropClass(node.id)}`}
         style={{ borderColor: color, color }}
+        tabIndex={0}
+        data-nav={top ? "card" : "item"}
+        data-id={node.id}
         onDoubleClick={() => !missing && onOpenBlock(node.name)}
-        title={missing ? `Block ${node.name} does not exist` : `Block ${node.name}. Double-click to edit it.`}
+        title={missing ? `The block ${node.name} does not exist` : `Block ${node.name}. Enter or double-click to edit it.`}
+        {...dragProps(node)}
+        {...dropProps(node.id, top ? "card" : "row")}
       >
         <TemplatesIcon />
         <span className="brick-name">{node.name}</span>
         <span className="brick-size">{missing ? "missing" : `${size ?? 0} ${size === 1 ? "item" : "items"}`}</span>
         {!missing && (
-          <button type="button" className="icon-btn" title="Edit this block" aria-label={`Edit block ${node.name}`} onClick={() => onOpenBlock(node.name)}>
+          <button type="button" className="icon-btn" tabIndex={-1} title="Edit this block" aria-label={`Edit block ${node.name}`} onClick={() => onOpenBlock(node.name)}>
             <PencilIcon />
           </button>
         )}
-        <button type="button" className="icon-btn danger" title="Remove from here" aria-label={`Remove block ${node.name} from here`} onClick={() => remove(node)}>
+        <button type="button" className="icon-btn danger" tabIndex={-1} title="Remove from here" aria-label={`Remove block ${node.name} from here`} onClick={() => remove(node)}>
           <XIcon />
         </button>
       </div>
     );
   };
 
+  const tools = (node: FsNode) => (
+    <>
+      <button type="button" className="icon-btn" tabIndex={-1} title="Rename (F2)" aria-label={`Rename ${node.name}`} onClick={() => setEditing({ id: node.id, value: node.name })}>
+        <PencilIcon />
+      </button>
+      <button type="button" className="icon-btn danger" tabIndex={-1} title="Delete (Del)" aria-label={`Delete ${node.name}`} onClick={() => remove(node)}>
+        <XIcon />
+      </button>
+    </>
+  );
+
   const itemRow = (parent: FsNode, node: FsNode) => {
-    if (node.kind === "insert") return brick(node);
+    if (node.kind === "insert") return brick(node, false);
     const isFile = isFileNode(node);
+    const isEditing = editing?.id === node.id;
     return (
-      <div key={node.id} className="card-item">
+      <div key={node.id} className={`card-item ${dropClass(node.id)}`} {...dragProps(node)} {...dropProps(node.id, "row")}>
         <span className="node-icon">{isFile ? <FileIcon /> : <FolderIcon />}</span>
-        {isFile || editing?.id === node.id ? (
-          nameOrInput(node, "name")
+        {isEditing ? (
+          nameInput(node)
+        ) : isFile ? (
+          <span className="name" tabIndex={0} data-nav="item" data-id={node.id} title={node.name}>{node.name}</span>
         ) : (
-          <button type="button" className="name-btn" onClick={() => enter([...trail, parent, node])} title={`Go into ${node.name}`}>
+          <button type="button" className="name-btn" data-nav="item" data-id={node.id} onClick={() => enter([...trail, parent, node])} title={`Go into ${node.name}`}>
             {node.name}
           </button>
         )}
@@ -168,18 +330,13 @@ export default function BlocksView({
             <ChevronIcon />
           </span>
         )}
-        <button type="button" className="icon-btn" title="Rename" aria-label={`Rename ${node.name}`} onClick={() => setEditing({ id: node.id, value: node.name })}>
-          <PencilIcon />
-        </button>
-        <button type="button" className="icon-btn danger" title="Delete" aria-label={`Delete ${node.name}`} onClick={() => remove(node)}>
-          <XIcon />
-        </button>
+        {tools(node)}
       </div>
     );
   };
 
   return (
-    <div className={`blocks-view ${dropId === "@here" ? "drop" : ""}`} {...dropProps(current?.id ?? null)}>
+    <div className="blocks-view">
       <nav className="crumbs" aria-label="Path">
         <button type="button" onClick={() => enter([])}>{templateName ?? "Root"}</button>
         {trail.map((n, i) => (
@@ -189,56 +346,52 @@ export default function BlocksView({
           </span>
         ))}
         <span className="crumbs-hint">
-          {here.length} {here.length === 1 ? "thing" : "things"} here · click a folder’s name to go into it
+          {here.length} {here.length === 1 ? "thing" : "things"} here · click a folder’s name to go into it · drag to rearrange
         </span>
       </nav>
 
-      <div className="board">
+      <div
+        ref={boardRef}
+        className={`board ${drop?.id === "@here" ? "drop" : ""}`}
+        onKeyDown={onKeyDown}
+        {...dropProps(null, "into")}
+      >
         {here.map((node) => {
           if (node.kind === "insert") return brick(node, true);
+          const isEditing = editing?.id === node.id;
           if (isFileNode(node)) {
             return (
-              <section key={node.id} className="card file">
+              <section key={node.id} className={`card file ${dropClass(node.id)}`} {...dragProps(node)} {...dropProps(node.id, "row")}>
                 <div className="card-head">
                   <span className="node-icon file"><FileIcon /></span>
-                  {nameOrInput(node, "card-title")}
-                  <button type="button" className="icon-btn" title="Rename" aria-label={`Rename ${node.name}`} onClick={() => setEditing({ id: node.id, value: node.name })}>
-                    <PencilIcon />
-                  </button>
-                  <button type="button" className="icon-btn danger" title="Delete" aria-label={`Delete ${node.name}`} onClick={() => remove(node)}>
-                    <XIcon />
-                  </button>
+                  {isEditing ? nameInput(node) : <span className="card-title" tabIndex={0} data-nav="card" data-id={node.id} title={node.name}>{node.name}</span>}
+                  {tools(node)}
                 </div>
               </section>
             );
           }
           return (
-            <section key={node.id} className={`card ${dropId === node.id ? "drop" : ""}`} {...dropProps(node.id)}>
+            <section key={node.id} className={`card ${dropClass(node.id)}`} {...dragProps(node)} {...dropProps(node.id, "card")}>
               <div className="card-head">
                 <span className="node-icon"><FolderIcon size={18} /></span>
-                {editing?.id === node.id ? (
-                  nameOrInput(node, "card-title")
+                {isEditing ? (
+                  nameInput(node)
                 ) : (
-                  <button type="button" className="card-title name-btn" onClick={() => enter([...trail, node])} title={`Go into ${node.name}`}>
+                  <button type="button" className="card-title name-btn" data-nav="card" data-id={node.id} onClick={() => enter([...trail, node])} title={`Go into ${node.name}`}>
                     {node.name}
                   </button>
                 )}
-                <button type="button" className="icon-btn" title="Rename" aria-label={`Rename ${node.name}`} onClick={() => setEditing({ id: node.id, value: node.name })}>
-                  <PencilIcon />
-                </button>
-                <button type="button" className="icon-btn danger" title="Delete this folder" aria-label={`Delete ${node.name}`} onClick={() => remove(node)}>
-                  <XIcon />
-                </button>
+                {tools(node)}
               </div>
               {node.children.map((child) => itemRow(node, child))}
-              {dropId === node.id && <div className="drop-hint">Drop the block here</div>}
+              {drop?.id === node.id && drop.pos === "into" && <div className="drop-hint">Drop it here</div>}
               <button type="button" className="add-dashed" onClick={(e) => openMenu(node.id, e)} onMouseDown={(e) => e.stopPropagation()}>
                 <PlusIcon /> Add
               </button>
             </section>
           );
         })}
-        <button type="button" className="card add-card" onClick={(e) => openMenu(current?.id ?? null, e)} onMouseDown={(e) => e.stopPropagation()}>
+        <button type="button" className="card add-card" onClick={(e) => openMenu(hereId, e)} onMouseDown={(e) => e.stopPropagation()}>
           <PlusIcon size={18} />
           <span>{here.length === 0 ? "Add the first folder" : "Add a folder here"}</span>
           <small>or drag a block in from the left</small>

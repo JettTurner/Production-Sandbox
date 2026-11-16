@@ -1,6 +1,6 @@
 # Folder Hierarchy Studio
 
-**Version:** 0.2.1 · **Author:** Jett Turner
+**Version:** 0.2.0 · **Author:** Jett Turner
 **Purpose:** Design, check, and generate folder hierarchies from a simple text definition (`.fh`).
 
 A client-side web app (React + TypeScript + Vite) that also ships as a Windows desktop app (Electron). Nothing is uploaded anywhere; everything runs on your machine. Files written in the legacy `.pbkstruct` syntax still load.
@@ -55,7 +55,8 @@ A **block** is a reusable set of folders. In the `.fh` file a block is a `@templ
 
 | Feature | How |
 | --- | --- |
-| **Editing** | In every view: double-click or `F2` to rename, `Del` to delete, arrow keys to move around, `Alt+↑/↓` to reorder. In List, drag to move and double-click a block row to edit the block in place. |
+| **Editing** | In every view: double-click or `F2` to rename, `Del` to delete, arrow keys to move around, `Alt+arrows` to reorder, and drag to rearrange (onto a folder to put it inside, onto an edge to place it before or after). In Blocks, `Enter` goes into a folder and `Backspace` goes back up. In List, double-click a block row to edit the block in place. |
+| **Find** | `Ctrl+F` or the Find box: type part of a name, pick a match, and the current view jumps to it. |
 | **Source editor** | Syntax highlighting and inline parse warnings/errors. Comments you write are kept when you edit in the tree. |
 | **Pre-flight checks** | Names that Windows can't create (`< > : " / \ | ? *`, reserved names like `CON`, trailing dot or space), a name used as both file and folder, and paths that approach the 260-character limit are flagged before anything is written. Same-name siblings are merged, and the counts reflect what actually lands on disk. |
 | **Create folders** | *Chrome, Edge, or the desktop app.* Choose a destination, then review a dry run: what is new, what already exists (left untouched), and any conflicts. Create the whole structure or a single block, optionally wrapped in one new folder. Nothing is ever overwritten or deleted. |

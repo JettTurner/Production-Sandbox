@@ -14,6 +14,8 @@ interface SidebarProps {
   section: SectionRef;
   /** @insert count per template name. */
   uses: Record<string, number>;
+  /** Folders + files each block creates on its own. */
+  blockSizes: Record<string, number>;
   onSelect: (section: SectionRef) => void;
   onAddTemplate: (name: string) => void;
   /** Add one of the ready-made starter blocks to this structure. */
@@ -27,7 +29,7 @@ export const DEFAULT_TEMPLATE_COLOR = "#f0b35a";
 const STARTERS = starterBlocks();
 
 /** Left column: the Root structure plus every block (template), always visible. */
-export default function Sidebar({ doc, colors, section, uses, onSelect, onAddTemplate, onAddStarter, className, style }: SidebarProps) {
+export default function Sidebar({ doc, colors, section, uses, blockSizes, onSelect, onAddTemplate, onAddStarter, className, style }: SidebarProps) {
   const [filter, setFilter] = useState("");
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -106,7 +108,7 @@ export default function Sidebar({ doc, colors, section, uses, onSelect, onAddTem
             <button
               type="button"
               key={name}
-              className={`side-item ${active ? "active" : ""}`}
+              className={`side-item two-line ${active ? "active" : ""}`}
               aria-current={active ? "true" : undefined}
               draggable
               onDragStart={(e) => {
@@ -118,8 +120,13 @@ export default function Sidebar({ doc, colors, section, uses, onSelect, onAddTem
               title={`${name}: used ${count} ${count === 1 ? "time" : "times"}. Drag it onto a folder to put it there.`}
             >
               <span className="side-dot" style={{ background: colors[name] ?? DEFAULT_TEMPLATE_COLOR }} />
-              <span className="side-name">{name}</span>
-              <span className={`side-meta ${count === 0 ? "unused" : ""}`}>{count === 0 ? "unused" : `${count}×`}</span>
+              <span className="side-text">
+                <span className="side-name">{name}</span>
+                <span className="side-sub">
+                  {blockSizes[name] ?? 0} {blockSizes[name] === 1 ? "item" : "items"} ·{" "}
+                  {count === 0 ? "not used yet" : `used ${count} ${count === 1 ? "time" : "times"}`}
+                </span>
+              </span>
             </button>
           );
         })}

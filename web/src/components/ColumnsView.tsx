@@ -5,6 +5,8 @@ import { cloneWithNewIds } from "../lib/ids";
 import {
   insertAfter,
   insertChild,
+  moveNode,
+  moveToParent,
   makeFile,
   makeFolder,
   makeInsert,
@@ -31,7 +33,13 @@ export interface ViewProps {
   onCreateTemplate: (name: string) => void;
   onOpenBlock: (name: string) => void;
   onNotice: (message: string) => void;
+  /** Ask the view to show and focus a node (from Find): ids from the top of the section down to it. */
+  reveal?: { ids: string[]; seq: number } | null;
 }
+
+/** Drag type for folders/files/block lines being moved inside a view. */
+export const NODE_MIME = "application/x-fh-node";
+export type DropPos = "before" | "after" | "into";
 
 /** Which tree a column edits: the root, or a block's own contents. */
 type Owner = { kind: "root" } | { kind: "template"; name: string };
@@ -61,8 +69,11 @@ export default function ColumnsView({
   onCreateTemplate,
   onOpenBlock,
   onNotice,
+  reveal,
 }: ViewProps) {
   const [sel, setSel] = useState<string[]>([]);
+  const [drag, setDrag] = useState<{ id: string; owner: string } | null>(null);
+  const [dropRow, setDropRow] = useState<{ id: string; pos: DropPos } | null>(null);
   const [active, setActive] = useState(0);
   const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
   const [menu, setMenu] = useState<{ col: number; anchor: HTMLElement } | null>(null);
@@ -71,6 +82,7 @@ export default function ColumnsView({
   const scroller = useRef<HTMLDivElement>(null);
 
   const sectionOwner: Owner = section.kind === "template" ? { kind: "template", name: section.name! } : { kind: "root" };
+  const ownerKey = (o: Owner) => (o.kind === "root" ? "@root" : o.name);
   const ownerNodes = (o: Owner): FsNode[] => (o.kind === "root" ? doc.root : doc.templates[o.name] ?? []);
   const commit = (o: Owner, nodes: FsNode[]) => (o.kind === "root" ? onRootChange(nodes) : onTemplateNodesChange(o.name, nodes));
 
@@ -115,6 +127,21 @@ export default function ColumnsView({
     scroller.current?.querySelector<HTMLElement>(`[data-row="${CSS.escape(focusKey)}"]`)?.focus();
     setFocusKey(null);
   }, [focusKey]);
+
+  // Find: open the columns down to the node and focus it.
+  useEffect(() => {
+    if (!reveal || reveal.ids.length === 0) return;
+    setSel(reveal.ids);
+    setActive(reveal.ids.length - 1);
+    setFocusKey(`${reveal.ids.length - 1}:${reveal.ids[reveal.ids.length - 1]}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reveal?.seq]);
+
+  const endDrag = () => {
+    setDrag(null);
+    setDropRow(null);
+    setDropCol(null);
+  };
 
   const select = (col: number, id: string, focus = false) => {
     setSel((prev) => [...prev.slice(0, col), id]);
@@ -240,20 +267,29 @@ export default function ColumnsView({
               className={`column ${dropCol === col ? "drop" : ""}`}
               aria-label={c.title}
               onDragOver={(e) => {
-                if (!e.dataTransfer.types.includes(TEMPLATE_MIME)) return;
+                const moving = drag && drag.owner === ownerKey(c.owner);
+                if (!moving && !e.dataTransfer.types.includes(TEMPLATE_MIME)) return;
                 e.preventDefault();
-                e.dataTransfer.dropEffect = "copy";
+                e.dataTransfer.dropEffect = moving ? "move" : "copy";
                 if (dropCol !== col) setDropCol(col);
+                if (dropRow) setDropRow(null);
               }}
               onDragLeave={(e) => {
                 if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropCol(null);
               }}
               onDrop={(e) => {
                 const template = e.dataTransfer.getData(TEMPLATE_MIME);
-                setDropCol(null);
-                if (!template) return;
-                e.preventDefault();
-                dropBlock(col, template);
+                const moving = drag && drag.owner === ownerKey(c.owner) ? drag : null;
+                endDrag();
+                if (template) {
+                  e.preventDefault();
+                  dropBlock(col, template);
+                } else if (moving) {
+                  // Dropped on the column itself: move to the end of this level.
+                  e.preventDefault();
+                  commit(c.owner, moveToParent(ownerNodes(c.owner), moving.id, c.parentId));
+                  setSel((prev) => prev.slice(0, col));
+                }
               }}
             >
               <div className="column-title" title={c.title}>{c.title}</div>
@@ -279,7 +315,15 @@ export default function ColumnsView({
                   return (
                     <div
                       key={node.id}
-                      className={`col-row ${isSel ? "selected" : ""} ${isActive ? "active" : ""} ${isInsert ? "is-block" : ""}`}
+                      className={`col-row ${isSel ? "selected" : ""} ${isActive ? "active" : ""} ${isInsert ? "is-block" : ""} ${drag?.id === node.id ? "dragging" : ""} ${dropRow?.id === node.id ? `drop-${dropRow.pos}` : ""}`}
+                      draggable={!isEditing}
+                      onDragStart={(e) => {
+                        e.stopPropagation();
+                        e.dataTransfer.setData(NODE_MIME, node.id);
+                        e.dataTransfer.effectAllowed = "move";
+                        setDrag({ id: node.id, owner: ownerKey(c.owner) });
+                      }}
+                      onDragEnd={endDrag}
                       style={color ? { borderColor: color } : undefined}
                       role="option"
                       aria-selected={isSel}
@@ -289,12 +333,36 @@ export default function ColumnsView({
                       onDoubleClick={() => (isInsert ? onOpenBlock(node.name) : setEditing({ id: node.id, value: node.name }))}
                       onKeyDown={(e) => onKey(e, col, node)}
                       onDragOver={(e) => {
+                        const moving = drag && drag.owner === ownerKey(c.owner) && drag.id !== node.id;
+                        if (moving) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          e.dataTransfer.dropEffect = "move";
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const y = (e.clientY - rect.top) / rect.height;
+                          // Folders: top = before, middle = into, bottom = after. Others: halves.
+                          const pos: DropPos = isInsert || isFile ? (y < 0.5 ? "before" : "after") : y < 0.3 ? "before" : y > 0.7 ? "after" : "into";
+                          if (dropRow?.id !== node.id || dropRow.pos !== pos) setDropRow({ id: node.id, pos });
+                          if (dropCol !== null) setDropCol(null);
+                          return;
+                        }
                         if (!e.dataTransfer.types.includes(TEMPLATE_MIME) || isInsert || isFile) return;
                         e.preventDefault();
                         e.stopPropagation();
                         e.dataTransfer.dropEffect = "copy";
                       }}
                       onDrop={(e) => {
+                        const moving = drag && drag.owner === ownerKey(c.owner) && drag.id !== node.id ? drag : null;
+                        if (moving) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const pos = dropRow?.id === node.id ? dropRow.pos : "after";
+                          endDrag();
+                          commit(c.owner, moveNode(ownerNodes(c.owner), moving.id, node.id, pos));
+                          if (pos === "into") select(col, node.id);
+                          else setSel((prev) => [...prev.slice(0, col), moving.id]);
+                          return;
+                        }
                         const template = e.dataTransfer.getData(TEMPLATE_MIME);
                         if (!template || isInsert || isFile) return;
                         e.preventDefault();
