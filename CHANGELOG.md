@@ -3,6 +3,11 @@
 Newest first. Each version is a `## X.Y.Z (date)` heading with a `- ` line per change, written for the people using the app.
 `bump-version.ps1` starts each new version's list from the commit messages since the last version, for you to edit.
 
+## 0.2.1 (2026-11-16)
+
+- Update package-lock.json
+- Light theme, one tidy stylesheet, docs for the new features
+
 ## 0.2.0 (2026-11-16)
 
 - New three-pane layout: Root and templates on the left, one editor in the middle, what will be created on the right

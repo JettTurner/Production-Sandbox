@@ -1,6 +1,6 @@
 # Folder Hierarchy Studio
 
-**Version:** 0.2.0 · **Author:** Jett Turner
+**Version:** 0.2.1 · **Author:** Jett Turner
 **Purpose:** Design, check, and generate folder hierarchies from a simple text definition (`.fh`).
 
 A client-side web app (React + TypeScript + Vite) that also ships as a Windows desktop app (Electron). Nothing is uploaded anywhere; everything runs on your machine. Files written in the legacy `.pbkstruct` syntax still load.
