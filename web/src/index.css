@@ -1991,22 +1991,6 @@ fieldset.field .field-label {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.block-band {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid;
-  background: #24282d;
-  font-size: 12px;
-  font-weight: 500;
-}
-.block-band svg {
-  flex: 0 0 auto;
-  margin-top: 1px;
-}
 .column-rows {
   flex: 1 1 auto;
   min-height: 0;
@@ -2798,5 +2782,101 @@ button.chip:hover {
   }
   .side-item.two-line {
     min-height: 52px;
+  }
+}
+
+/* ---------- Columns: block box, controls on hover ---------- */
+.column-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.column-title span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.column-title svg {
+  flex: 0 0 auto;
+}
+/* A column showing what is inside a block gets a box in the block's color. */
+.column.in-block {
+  margin: 8px 6px;
+  padding: 10px 8px;
+  border: 1.5px solid var(--block-color);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--block-color) 5%, transparent);
+}
+.column.in-block .column-title {
+  color: var(--block-color);
+  font-weight: 500;
+}
+.col-row {
+  position: relative;
+}
+/* Row controls float over the right end of the row, only while pointing at it
+   (or tabbing to it), so nothing shifts as the pointer moves down a column. */
+.col-row-actions {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  bottom: 3px;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding: 0 0 0 10px;
+  background: linear-gradient(to right, transparent, var(--bg-elev-2) 10px);
+  border-radius: 6px;
+}
+.col-row:hover .col-row-actions,
+.col-row:focus-visible .col-row-actions {
+  display: flex;
+}
+.col-row.selected.active .col-row-actions {
+  background: linear-gradient(to right, transparent, var(--sel-bg) 10px);
+}
+.col-row-actions .icon-btn {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+}
+/* Hovering shows only rename, duplicate and delete, so most of the row stays
+   clickable; reorder by dragging or Alt+arrows. Touch shows all five. */
+.col-row-actions .touch-only {
+  display: none;
+}
+/* Hidden with opacity (not visibility) so it can still be reached with Tab. */
+.column .add-dashed {
+  opacity: 0;
+}
+.column:hover .add-dashed,
+.column .add-dashed:focus-visible,
+.column.drop .add-dashed,
+.column .add-dashed.show {
+  opacity: 1;
+}
+/* No hover on touch screens: the selected row shows its controls on a second line, and Add stays visible. */
+@media (hover: none), (max-width: 860px) {
+  .col-row-actions,
+  .col-row:hover .col-row-actions,
+  .col-row:focus-within .col-row-actions {
+    display: none;
+  }
+  .col-row.selected.active .col-row-actions {
+    position: static;
+    display: flex;
+    padding: 0 0 6px;
+    background: none;
+  }
+  .col-row.selected.active .col-row-actions .icon-btn {
+    flex: 1 1 0;
+    width: auto;
+    height: 40px;
+  }
+  .col-row-actions .touch-only {
+    display: inline-grid;
+  }
+  .column .add-dashed {
+    opacity: 1;
   }
 }

@@ -264,7 +264,8 @@ export default function ColumnsView({
           return (
             <section
               key={`${col}:${c.owner.kind === "template" ? c.owner.name : "root"}:${c.parentId ?? ""}`}
-              className={`column ${dropCol === col ? "drop" : ""}`}
+              className={`column ${dropCol === col ? "drop" : ""} ${block ? "in-block" : ""}`}
+              style={block ? ({ "--block-color": colors[block] ?? DEFAULT_COLOR } as React.CSSProperties) : undefined}
               aria-label={c.title}
               onDragOver={(e) => {
                 const moving = drag && drag.owner === ownerKey(c.owner);
@@ -292,16 +293,18 @@ export default function ColumnsView({
                 }
               }}
             >
-              <div className="column-title" title={c.title}>{c.title}</div>
-              {block && (
-                <div className="block-band" style={{ borderColor: colors[block] ?? DEFAULT_COLOR, color: colors[block] ?? DEFAULT_COLOR }}>
-                  <TemplatesIcon />
-                  <span>
-                    Inside the block {block}
-                    {(uses[block] ?? 0) > 1 ? `. A change here updates all ${uses[block]} places it is used.` : "."}
-                  </span>
-                </div>
-              )}
+              {/* A column that shows a block's contents is boxed in the block's color. */}
+              <div
+                className="column-title"
+                title={
+                  block
+                    ? `Inside the block ${block}.${(uses[block] ?? 0) > 1 ? ` A change here updates all ${uses[block]} places it is used.` : ""}`
+                    : c.title
+                }
+              >
+                {block && <TemplatesIcon />}
+                <span>{c.title}</span>
+              </div>
               <div className="column-rows" role="listbox" aria-label={c.title}>
                 {c.nodes.map((node, at) => {
                   const isSel = sel[col] === node.id;
@@ -393,7 +396,7 @@ export default function ColumnsView({
                           </span>
                         )}
                       </div>
-                      {isActive && !isEditing && (
+                      {!isEditing && (
                         <div className="col-row-actions">
                           {isInsert ? (
                             <button type="button" className="icon-btn" title="Edit this block" aria-label="Edit this block" tabIndex={-1} onClick={(e) => { e.stopPropagation(); onOpenBlock(node.name); }}>
@@ -404,10 +407,10 @@ export default function ColumnsView({
                               <PencilIcon />
                             </button>
                           )}
-                          <button type="button" className="icon-btn" title="Move up" aria-label="Move up" tabIndex={-1} disabled={at === 0} onClick={(e) => { e.stopPropagation(); move(col, node, -1); }}>
+                          <button type="button" className="icon-btn touch-only" title="Move up" aria-label="Move up" tabIndex={-1} disabled={at === 0} onClick={(e) => { e.stopPropagation(); move(col, node, -1); }}>
                             <ChevronIcon className="up" />
                           </button>
-                          <button type="button" className="icon-btn" title="Move down" aria-label="Move down" tabIndex={-1} disabled={at === c.nodes.length - 1} onClick={(e) => { e.stopPropagation(); move(col, node, 1); }}>
+                          <button type="button" className="icon-btn touch-only" title="Move down" aria-label="Move down" tabIndex={-1} disabled={at === c.nodes.length - 1} onClick={(e) => { e.stopPropagation(); move(col, node, 1); }}>
                             <ChevronIcon className="down" />
                           </button>
                           <button type="button" className="icon-btn" title="Duplicate" aria-label="Duplicate" tabIndex={-1} onClick={(e) => { e.stopPropagation(); duplicate(col, node); }}>
@@ -425,7 +428,7 @@ export default function ColumnsView({
               </div>
               <button
                 type="button"
-                className="add-dashed"
+                className={`add-dashed ${c.nodes.length === 0 || menu?.col === col ? "show" : ""}`}
                 onClick={(e) => {
                   const anchor = e.currentTarget;
                   setMenu((m) => (m?.anchor === anchor ? null : { col, anchor }));
