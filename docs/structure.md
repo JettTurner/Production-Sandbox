@@ -122,7 +122,8 @@ name and path validated (`lib/validate.ts`).
     │   ├── ui-check.mjs       ← the built app driven in a browser (npm run test:ui)
     │   └── make-icon.mjs      ← icon SVG → build/icon.ico + public/icon.png (npm run icons)
     └── src/
-        ├── main.tsx           ← React bootstrap (mounts <App/>; adds html.electron)
+        ├── main.tsx           ← React bootstrap (mounts <App/>; adds html.electron;
+        │                         mounts Vercel <Analytics/> on the web build only)
         ├── App.tsx            ← application shell: layout, file I/O, template operations
         ├── index.css          ← ALL styling (single stylesheet, dark + light themes)
         ├── vite-env.d.ts      ← Vite client types + File System Access API typings
@@ -441,6 +442,10 @@ via `/DAppSourceDir`. Requires Node.js and Inno Setup 6
   resolved tree. Never overwrite or delete on disk.
 - Single stylesheet (`index.css`) with CSS variables; system fonts only (the
   desktop app must work offline).
+- Vercel Web Analytics (`@vercel/analytics/react`, mounted in `main.tsx`) counts
+  page views on the hosted site. It is not rendered in Electron: the desktop app
+  works offline and has no `/_vercel/insights` endpoint. This is a Vite app, so
+  use the `/react` entry, not `/next`.
 - Runtime fetches of bundled assets use `${import.meta.env.BASE_URL}`-relative
   paths so they resolve in the browser, under Vite preview, and inside
   Electron's `app://` scheme.
